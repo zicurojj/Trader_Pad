@@ -70,15 +70,14 @@ const COLUMNS = [
 ] as const
 
 export function ManualTradeExcelGrid({}: ExcelGridProps) {
-  const [entries, setEntries] = useState<Partial<ManualTradeEntryCreate>[]>([{ ...DEFAULT_ENTRY }])
+  const todayDate = new Date().toISOString().split('T')[0]
+  const [selectedDate, setSelectedDate] = useState<string>(todayDate)
+  const [entries, setEntries] = useState<Partial<ManualTradeEntryCreate>[]>([{ ...DEFAULT_ENTRY, tradeDate: todayDate }])
   const [isLoading, setIsLoading] = useState(false)
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
-  const [selectedCell, setSelectedCell] = useState<CellPosition>({ row: 0, col: 0 })
-  const [editingCell, setEditingCell] = useState<CellPosition | null>(null)
   const [copiedCell, setCopiedCell] = useState<{ row: number; col: string; value: any } | null>(null)
   const [masters, setMasters] = useState<MasterData>({})
   const [isReadOnlyMode, setIsReadOnlyMode] = useState(false)
-  
+
   const gridRef = useRef<HTMLDivElement>(null)
   const inputRefs = useRef<{ [key: string]: HTMLInputElement | HTMLSelectElement }>({})
 
@@ -141,10 +140,6 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
       if (entries.length > 1) {
         const newEntries = entries.filter((_, i) => i !== index)
         setEntries(newEntries)
-        // Adjust selected cell if needed
-        if (selectedCell.row >= newEntries.length) {
-          setSelectedCell({ ...selectedCell, row: newEntries.length - 1 })
-        }
       }
     }
   }
@@ -165,112 +160,12 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
 
   const handleKeyDown = (e: KeyboardEvent, rowIndex: number, colIndex: number) => {
     const column = COLUMNS[colIndex]
-    
+
     switch (e.key) {
-      case 'ArrowUp':
-        e.preventDefault()
-        if (rowIndex > 0) {
-          const newRow = rowIndex - 1
-          setSelectedCell({ row: newRow, col: colIndex })
-          // Auto-show dropdown for dropdown fields if not in read-only mode
-          if (!isReadOnlyMode && isDropdownField(column.key)) {
-            setEditingCell({ row: newRow, col: colIndex })
-          } else {
-            setEditingCell(null)
-          }
-        }
-        break
-      case 'ArrowDown':
-        e.preventDefault()
-        if (rowIndex < entries.length - 1) {
-          const newRow = rowIndex + 1
-          setSelectedCell({ row: newRow, col: colIndex })
-          // Auto-show dropdown for dropdown fields if not in read-only mode
-          if (!isReadOnlyMode && isDropdownField(column.key)) {
-            setEditingCell({ row: newRow, col: colIndex })
-          } else {
-            setEditingCell(null)
-          }
-        }
-        break
-      case 'ArrowLeft':
-        e.preventDefault()
-        if (colIndex > 0) {
-          const newCol = colIndex - 1
-          setSelectedCell({ row: rowIndex, col: newCol })
-          // Auto-show dropdown for dropdown fields if not in read-only mode
-          const newFieldKey = COLUMNS[newCol].key
-          if (!isReadOnlyMode && isDropdownField(newFieldKey)) {
-            setEditingCell({ row: rowIndex, col: newCol })
-          } else {
-            setEditingCell(null)
-          }
-        }
-        break
-      case 'ArrowRight':
-        e.preventDefault()
-        if (colIndex < COLUMNS.length - 1) {
-          const newCol = colIndex + 1
-          setSelectedCell({ row: rowIndex, col: newCol })
-          // Auto-show dropdown for dropdown fields if not in read-only mode
-          const newFieldKey = COLUMNS[newCol].key
-          if (!isReadOnlyMode && isDropdownField(newFieldKey)) {
-            setEditingCell({ row: rowIndex, col: newCol })
-          } else {
-            setEditingCell(null)
-          }
-        }
-        break
-      case 'Enter':
-        e.preventDefault()
-        if (editingCell) {
-          setEditingCell(null)
-          if (rowIndex < entries.length - 1) {
-            setSelectedCell({ row: rowIndex + 1, col: colIndex })
-          }
-        } else {
-          setEditingCell({ row: rowIndex, col: colIndex })
-        }
-        break
-      case 'Escape':
-        e.preventDefault()
-        setEditingCell(null)
-        break
       case 'Delete':
         e.preventDefault()
-        updateEntry(rowIndex, column.key, '')
-        break
-      case 'Tab':
-        e.preventDefault()
-        let newRow = rowIndex
-        let newCol = colIndex
-        
-        if (e.shiftKey) {
-          // Previous cell
-          if (colIndex > 0) {
-            newCol = colIndex - 1
-          } else if (rowIndex > 0) {
-            newRow = rowIndex - 1
-            newCol = COLUMNS.length - 1
-          }
-        } else {
-          // Next cell
-          if (colIndex < COLUMNS.length - 1) {
-            newCol = colIndex + 1
-          } else if (rowIndex < entries.length - 1) {
-            newRow = rowIndex + 1
-            newCol = 0
-          }
-        }
-        
-        setSelectedCell({ row: newRow, col: newCol })
-        
-        // Auto-show dropdown for dropdown fields if not in read-only mode
-        const newFieldKey = COLUMNS[newCol].key
-        if (!isReadOnlyMode && isDropdownField(newFieldKey)) {
-          setEditingCell({ row: newRow, col: newCol })
-        } else {
-          setEditingCell(null)
+        if (!isReadOnlyMode) {
+          updateEntry(rowIndex, column.key, '')
         }
         break
       case 'c':
@@ -286,54 +181,55 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
           updateEntry(rowIndex, column.key, copiedCell.value)
         }
         break
-      default:
-        if (!editingCell && e.key.length === 1 && !isReadOnlyMode) {
-          setEditingCell({ row: rowIndex, col: colIndex })
-        }
-        break
     }
   }
 
   const renderCell = (entry: Partial<ManualTradeEntryCreate>, rowIndex: number, colIndex: number) => {
     const column = COLUMNS[colIndex]
     const value = (entry as any)[column.key]
-    const isSelected = selectedCell.row === rowIndex && selectedCell.col === colIndex
-    const isEditing = editingCell?.row === rowIndex && editingCell?.col === colIndex
     const cellKey = `${rowIndex}-${colIndex}`
+    const tabIndex = rowIndex * COLUMNS.length + colIndex + 1
 
-    const cellClasses = `
-      w-full h-10 flex items-center
-      ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50' : isReadOnlyMode ? 'hover:bg-gray-100' : 'hover:bg-gray-50'}
-      ${copiedCell?.row === rowIndex && copiedCell?.col === column.key ? 'bg-green-50' : ''}
-      ${isReadOnlyMode ? 'cursor-default bg-gray-25' : 'cursor-cell'}
-    `.trim()
+    // Check if this field should be a dropdown
+    const dropdownFields = {
+      strategy: masters.Strategy || [],
+      code: masters.Code || [],
+      exchange: masters.Exchange || [],
+      commodity: masters.Commodity || [],
+      contractType: masters['Contract Type'] || [],
+      tradeType: masters['Trade Type'] || [],
+      optionType: masters['Option Type'] || [],
+      clientCode: masters['Client Code'] || [],
+      broker: masters.Broker || [],
+      teamName: masters['Team Name'] || [],
+    }
 
-    if (isEditing && !isReadOnlyMode) {
-      // Check if this field should be a dropdown
-      const dropdownFields = {
-        strategy: masters.Strategy || [],
-        code: masters.Code || [],
-        exchange: masters.Exchange || [],
-        commodity: masters.Commodity || [],
-        contractType: masters['Contract Type'] || [],
-        tradeType: masters['Trade Type'] || [],
-        optionType: masters['Option Type'] || [],
-        clientCode: masters['Client Code'] || [],
-        broker: masters.Broker || [],
-        teamName: masters['Team Name'] || [],
-      }
+    // Read-only mode - show text only
+    if (isReadOnlyMode) {
+      return (
+        <div className="w-full h-10 flex items-center px-3 bg-gray-50">
+          <div className="text-sm truncate">
+            {column.type === 'number' && value !== undefined && value !== null && value !== '' ?
+              parseFloat(value).toFixed(2) :
+              (value || '')
+            }
+          </div>
+        </div>
+      )
+    }
 
-      if (dropdownFields[column.key as keyof typeof dropdownFields]) {
-        const options = dropdownFields[column.key as keyof typeof dropdownFields]
-        return (
+    // Dropdown fields - always show dropdown
+    if (dropdownFields[column.key as keyof typeof dropdownFields]) {
+      const options = dropdownFields[column.key as keyof typeof dropdownFields]
+      return (
+        <div className="w-full h-10">
           <Select
             value={value || ''}
             onValueChange={(newValue) => {
               updateEntry(rowIndex, column.key, newValue)
-              setEditingCell(null)
             }}
           >
-            <SelectTrigger className="w-full h-full border-0 outline-none bg-transparent text-sm">
+            <SelectTrigger className="w-full h-full border-0 text-sm">
               <SelectValue placeholder={`Select ${column.label.toLowerCase()}`} />
             </SelectTrigger>
             <SelectContent>
@@ -344,45 +240,27 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
                   </SelectItem>
                 ))
               ) : (
-                <SelectItem value="" disabled>
+                <SelectItem value="no-options" disabled>
                   No options available
                 </SelectItem>
               )}
             </SelectContent>
           </Select>
-        )
-      }
+        </div>
+      )
+    }
 
-      // Regular input for non-dropdown fields
-      return (
+    // Regular input fields - always show input
+    return (
+      <div className="w-full h-10">
         <input
           ref={(el) => { if (el) inputRefs.current[cellKey] = el }}
           type={column.type}
           value={value || ''}
           onChange={(e) => updateEntry(rowIndex, column.key, e.target.value)}
-          onBlur={() => setEditingCell(null)}
-          onKeyDown={(e) => handleKeyDown(e, rowIndex, colIndex)}
-          className="w-full h-full px-3 text-sm border-0 outline-none bg-transparent"
-          placeholder={column.type === 'number' ? '0' : ''}
-          autoFocus
+          className="w-full h-full px-3 text-sm border-0 outline-none"
+          placeholder={column.type === 'number' ? '0' : column.type === 'date' ? 'yyyy-mm-dd' : ''}
         />
-      )
-    }
-
-    return (
-      <div
-        className={cellClasses}
-        onClick={() => setSelectedCell({ row: rowIndex, col: colIndex })}
-        onDoubleClick={() => !isReadOnlyMode && setEditingCell({ row: rowIndex, col: colIndex })}
-        onKeyDown={(e) => handleKeyDown(e, rowIndex, colIndex)}
-        tabIndex={0}
-      >
-        <div className="px-3 text-sm truncate">
-          {column.type === 'number' && value !== undefined && value !== null && value !== '' ? 
-            parseFloat(value).toFixed(2) : 
-            (value || '')
-          }
-        </div>
       </div>
     )
   }
@@ -565,16 +443,6 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
   }, [])
 
 
-
-  // Focus management
-  useEffect(() => {
-    const cellKey = `${selectedCell.row}-${selectedCell.col}`
-    const input = inputRefs.current[cellKey]
-    if (input && editingCell) {
-      input.focus()
-    }
-  }, [editingCell, selectedCell])
-
   return (
     <div className="space-y-6">
       {/* Header Actions */}
@@ -625,8 +493,8 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
 
       {/* Instructions */}
       <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
-        <strong>Keyboard shortcuts:</strong> Arrow keys to navigate • Enter to edit • Tab/Shift+Tab to move • Escape to cancel • 
-        Ctrl+C to copy • Ctrl+V to paste • Delete to clear • Double-click to edit
+        <strong>Keyboard shortcuts:</strong> Tab/Shift+Tab to navigate • Click dropdown to select •
+        Ctrl+C to copy • Ctrl+V to paste • Delete to clear field
       </div>
 
       {/* Spreadsheet Grid */}

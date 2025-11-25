@@ -4,7 +4,7 @@ import os
 
 # Get the absolute path to the project root (one level up from backend/)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATABASE_PATH = os.path.join(BASE_DIR, "trader_pad.db")
+DATABASE_PATH = os.path.join(BASE_DIR, "trader_entries.db")
 
 @contextmanager
 def get_db():
