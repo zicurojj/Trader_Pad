@@ -1,5 +1,5 @@
 from datetime import date
-from models import TradeEntryCreate, TradeEntryUpdate
+from models import TradeEntryCreate, TradeEntryUpdate, ManualTradeEntryCreate, ManualTradeEntryUpdate
 from typing import List, Optional
 
 def create_trade_entry(conn, entry: TradeEntryCreate) -> int:
@@ -230,3 +230,210 @@ def delete_master_value(conn, category: str, value_id: int) -> bool:
     """, (value_id,))
 
     return cursor.rowcount > 0
+
+
+# ============================================
+# MANUAL TRADE ENTRIES CRUD OPERATIONS
+# ============================================
+
+def create_manual_trade_entry(conn, entry: ManualTradeEntryCreate) -> int:
+    """
+    Create a new manual trade entry in the database.
+    Returns the ID of the created entry.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO manual_trade_entries (
+            trade_date, strategy, code, exchange, commodity, expiry,
+            contract_type, trade_type, strike_price, option_type,
+            client_code, broker, team_name, quantity, entry_price,
+            exit_price, pnl, status, remark, tag, entry_time, exit_time
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        entry.trade_date,
+        entry.strategy,
+        entry.code,
+        entry.exchange,
+        entry.commodity,
+        entry.expiry,
+        entry.contract_type,
+        entry.trade_type,
+        entry.strike_price,
+        entry.option_type,
+        entry.client_code,
+        entry.broker,
+        entry.team_name,
+        entry.quantity,
+        entry.entry_price,
+        entry.exit_price,
+        entry.pnl,
+        entry.status,
+        entry.remark,
+        entry.tag,
+        entry.entry_time,
+        entry.exit_time
+    ))
+    return cursor.lastrowid
+
+
+def get_manual_trade_entries_by_date(conn, trade_date: date) -> List[dict]:
+    """
+    Get all manual trade entries for a specific date.
+    Returns a list of dictionaries.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM manual_trade_entries
+        WHERE trade_date = ?
+        ORDER BY created_at DESC
+    """, (trade_date,))
+
+    rows = cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_manual_trade_entry_by_id(conn, entry_id: int) -> Optional[dict]:
+    """
+    Get a single manual trade entry by ID.
+    Returns a dictionary or None if not found.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM manual_trade_entries
+        WHERE id = ?
+    """, (entry_id,))
+
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+
+def update_manual_trade_entry(conn, entry_id: int, entry: ManualTradeEntryUpdate) -> bool:
+    """
+    Update an existing manual trade entry.
+    Returns True if successful, False if entry not found.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE manual_trade_entries SET
+            trade_date = ?,
+            strategy = ?,
+            code = ?,
+            exchange = ?,
+            commodity = ?,
+            expiry = ?,
+            contract_type = ?,
+            trade_type = ?,
+            strike_price = ?,
+            option_type = ?,
+            client_code = ?,
+            broker = ?,
+            team_name = ?,
+            quantity = ?,
+            entry_price = ?,
+            exit_price = ?,
+            pnl = ?,
+            status = ?,
+            remark = ?,
+            tag = ?,
+            entry_time = ?,
+            exit_time = ?
+        WHERE id = ?
+    """, (
+        entry.trade_date,
+        entry.strategy,
+        entry.code,
+        entry.exchange,
+        entry.commodity,
+        entry.expiry,
+        entry.contract_type,
+        entry.trade_type,
+        entry.strike_price,
+        entry.option_type,
+        entry.client_code,
+        entry.broker,
+        entry.team_name,
+        entry.quantity,
+        entry.entry_price,
+        entry.exit_price,
+        entry.pnl,
+        entry.status,
+        entry.remark,
+        entry.tag,
+        entry.entry_time,
+        entry.exit_time,
+        entry_id
+    ))
+    return cursor.rowcount > 0
+
+
+def delete_manual_trade_entry(conn, entry_id: int) -> bool:
+    """
+    Delete a manual trade entry by ID.
+    Returns True if successful, False if entry not found.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        DELETE FROM manual_trade_entries
+        WHERE id = ?
+    """, (entry_id,))
+    return cursor.rowcount > 0
+
+
+def get_all_manual_trade_entries(conn) -> List[dict]:
+    """
+    Get all manual trade entries (useful for testing).
+    Returns a list of dictionaries.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM manual_trade_entries
+        ORDER BY trade_date DESC, created_at DESC
+    """)
+
+    rows = cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+def bulk_create_manual_trade_entries(conn, entries: List[ManualTradeEntryCreate]) -> List[int]:
+    """
+    Create multiple manual trade entries in a single transaction.
+    Returns a list of IDs of the created entries.
+    """
+    cursor = conn.cursor()
+    created_ids = []
+    
+    for entry in entries:
+        cursor.execute("""
+            INSERT INTO manual_trade_entries (
+                trade_date, strategy, code, exchange, commodity, expiry,
+                contract_type, trade_type, strike_price, option_type,
+                client_code, broker, team_name, quantity, entry_price,
+                exit_price, pnl, status, remark, tag, entry_time, exit_time
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            entry.trade_date,
+            entry.strategy,
+            entry.code,
+            entry.exchange,
+            entry.commodity,
+            entry.expiry,
+            entry.contract_type,
+            entry.trade_type,
+            entry.strike_price,
+            entry.option_type,
+            entry.client_code,
+            entry.broker,
+            entry.team_name,
+            entry.quantity,
+            entry.entry_price,
+            entry.exit_price,
+            entry.pnl,
+            entry.status,
+            entry.remark,
+            entry.tag,
+            entry.entry_time,
+            entry.exit_time
+        ))
+        created_ids.append(cursor.lastrowid)
+    
+    return created_ids

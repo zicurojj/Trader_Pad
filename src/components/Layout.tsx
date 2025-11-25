@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { FileText, Settings } from 'lucide-react';
+import { FileText, Settings, Grid3x3 } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -21,6 +21,7 @@ export function Layout() {
 
   const navItems = [
     { path: '/admin/trade-entry', label: 'Trade Entry', icon: FileText },
+    { path: '/admin/manual-trade-entry', label: 'Manual Trade Entry', icon: Grid3x3 },
     { path: '/admin/masters', label: 'Masters', icon: Settings },
   ];
 

@@ -77,3 +77,57 @@ class MasterCategoryResponse(BaseModel):
     """Model for returning all values in a master category"""
     category: str
     values: list[MasterValueResponse]
+
+
+# ============================================
+# MANUAL TRADE ENTRIES MODELS
+# ============================================
+
+class ManualTradeEntryBase(BaseModel):
+    """Base model for Manual Trade Entry with all required fields"""
+    trade_date: date = Field(..., alias="tradeDate")
+    strategy: str
+    code: str
+    exchange: str
+    commodity: str
+    expiry: date
+    contract_type: str = Field(..., alias="contractType")
+    trade_type: str = Field(..., alias="tradeType")
+    strike_price: float = Field(..., alias="strikePrice")
+    option_type: str = Field(..., alias="optionType")
+    client_code: str = Field(..., alias="clientCode")
+    broker: str
+    team_name: str = Field(..., alias="teamName")
+    quantity: int = Field(default=1)
+    entry_price: Optional[float] = Field(None, alias="entryPrice")
+    exit_price: Optional[float] = Field(None, alias="exitPrice")
+    pnl: Optional[float] = Field(None)
+    status: str = Field(default="Open")
+    remark: Optional[str] = None
+    tag: Optional[str] = None
+    entry_time: Optional[str] = Field(None, alias="entryTime")
+    exit_time: Optional[str] = Field(None, alias="exitTime")
+
+    class Config:
+        populate_by_name = True  # Allow using both snake_case and camelCase
+
+
+class ManualTradeEntryCreate(ManualTradeEntryBase):
+    """Model for creating a new manual trade entry (no ID)"""
+    pass
+
+
+class ManualTradeEntryUpdate(ManualTradeEntryBase):
+    """Model for updating an existing manual trade entry"""
+    pass
+
+
+class ManualTradeEntryResponse(ManualTradeEntryBase):
+    """Model for returning manual trade entry data (includes ID and timestamps)"""
+    id: int
+    created_at: str = Field(..., alias="createdAt")
+    updated_at: str = Field(..., alias="updatedAt")
+
+    class Config:
+        from_attributes = True
+        populate_by_name = True

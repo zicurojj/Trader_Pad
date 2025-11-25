@@ -10,7 +10,10 @@ from models import (
     DeleteResponse,
     MasterValueCreate,
     MasterValueResponse,
-    MasterCategoryResponse
+    MasterCategoryResponse,
+    ManualTradeEntryCreate,
+    ManualTradeEntryUpdate,
+    ManualTradeEntryResponse
 )
 from database import get_db
 import crud
@@ -25,7 +28,7 @@ app = FastAPI(
 # Configure CORS - Allow React frontend to communicate with backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:5175"],  # Vite dev server
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost:5176", "http://localhost:5177", "http://localhost:5178"],  # Vite dev server
     allow_credentials=True,
     allow_methods=["*"],  # Allow all HTTP methods (GET, POST, PUT, DELETE)
     allow_headers=["*"],  # Allow all headers
@@ -338,6 +341,196 @@ def delete_master_value(category: str, value_id: int):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting master value: {str(e)}"
+        )
+
+
+# ============================================
+# MANUAL TRADE ENTRIES ENDPOINTS
+# ============================================
+
+@app.post("/api/manual-trade-entries", response_model=ManualTradeEntryResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+def create_manual_trade_entry(entry: ManualTradeEntryCreate):
+    """
+    Create a new manual trade entry.
+
+    - **entry**: Manual trade entry data from the Excel-like grid
+    - Returns the created entry with ID and timestamps
+    """
+    try:
+        with get_db() as conn:
+            entry_id = crud.create_manual_trade_entry(conn, entry)
+            created_entry = crud.get_manual_trade_entry_by_id(conn, entry_id)
+
+            if not created_entry:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Entry created but could not be retrieved"
+                )
+
+            return created_entry
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating manual trade entry: {str(e)}"
+        )
+
+
+@app.post("/api/manual-trade-entries/bulk", response_model=List[ManualTradeEntryResponse], response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+def bulk_create_manual_trade_entries(entries: List[ManualTradeEntryCreate]):
+    """
+    Create multiple manual trade entries at once.
+
+    - **entries**: List of manual trade entry data from the Excel-like grid
+    - Returns the list of created entries with IDs and timestamps
+    """
+    try:
+        with get_db() as conn:
+            entry_ids = crud.bulk_create_manual_trade_entries(conn, entries)
+            created_entries = []
+            
+            for entry_id in entry_ids:
+                entry = crud.get_manual_trade_entry_by_id(conn, entry_id)
+                if entry:
+                    created_entries.append(entry)
+
+            return created_entries
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating manual trade entries: {str(e)}"
+        )
+
+
+@app.get("/api/manual-trade-entries/date/{trade_date}", response_model=List[ManualTradeEntryResponse], response_model_by_alias=True)
+def get_manual_trade_entries_by_date(trade_date: date):
+    """
+    Get all manual trade entries for a specific date.
+
+    - **trade_date**: Date in YYYY-MM-DD format
+    - Returns list of manual trade entries for that date
+    """
+    try:
+        with get_db() as conn:
+            entries = crud.get_manual_trade_entries_by_date(conn, trade_date)
+            return entries
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching manual trade entries: {str(e)}"
+        )
+
+
+@app.get("/api/manual-trade-entries", response_model=List[ManualTradeEntryResponse], response_model_by_alias=True)
+def get_all_manual_trade_entries():
+    """
+    Get all manual trade entries (for testing/debugging).
+
+    - Returns list of all manual trade entries
+    """
+    try:
+        with get_db() as conn:
+            entries = crud.get_all_manual_trade_entries(conn)
+            return entries
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching manual trade entries: {str(e)}"
+        )
+
+
+@app.get("/api/manual-trade-entries/{entry_id}", response_model=ManualTradeEntryResponse, response_model_by_alias=True)
+def get_manual_trade_entry(entry_id: int):
+    """
+    Get a specific manual trade entry by ID.
+
+    - **entry_id**: Manual trade entry ID
+    - Returns the manual trade entry data
+    """
+    try:
+        with get_db() as conn:
+            entry = crud.get_manual_trade_entry_by_id(conn, entry_id)
+
+            if not entry:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Manual trade entry with ID {entry_id} not found"
+                )
+
+            return entry
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching manual trade entry: {str(e)}"
+        )
+
+
+@app.put("/api/manual-trade-entries/{entry_id}", response_model=ManualTradeEntryResponse, response_model_by_alias=True)
+def update_manual_trade_entry(entry_id: int, entry: ManualTradeEntryUpdate):
+    """
+    Update an existing manual trade entry.
+
+    - **entry_id**: Manual trade entry ID to update
+    - **entry**: Updated manual trade entry data
+    - Returns the updated entry
+    """
+    try:
+        with get_db() as conn:
+            success = crud.update_manual_trade_entry(conn, entry_id, entry)
+
+            if not success:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Manual trade entry with ID {entry_id} not found"
+                )
+
+            updated_entry = crud.get_manual_trade_entry_by_id(conn, entry_id)
+            return updated_entry
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating manual trade entry: {str(e)}"
+        )
+
+
+@app.delete("/api/manual-trade-entries/{entry_id}", response_model=DeleteResponse)
+def delete_manual_trade_entry(entry_id: int):
+    """
+    Delete a manual trade entry.
+
+    - **entry_id**: Manual trade entry ID to delete
+    - Returns success message
+    """
+    try:
+        with get_db() as conn:
+            success = crud.delete_manual_trade_entry(conn, entry_id)
+
+            if not success:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Manual trade entry with ID {entry_id} not found"
+                )
+
+            return {
+                "message": "Manual trade entry deleted successfully",
+                "id": entry_id
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting manual trade entry: {str(e)}"
         )
 
 

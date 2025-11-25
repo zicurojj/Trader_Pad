@@ -110,6 +110,44 @@ CREATE INDEX IF NOT EXISTS idx_team_name ON trader_entries(team_name);
 CREATE INDEX IF NOT EXISTS idx_status ON trader_entries(status);
 
 -- ============================================
+-- MANUAL TRADE ENTRIES TABLE (Excel-like format)
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS manual_trade_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    trade_date DATE NOT NULL,
+    strategy TEXT NOT NULL,
+    code TEXT NOT NULL,
+    exchange TEXT NOT NULL,
+    commodity TEXT NOT NULL,
+    expiry DATE NOT NULL,
+    contract_type TEXT NOT NULL,
+    trade_type TEXT NOT NULL,
+    strike_price DECIMAL(10, 2) NOT NULL,
+    option_type TEXT NOT NULL,
+    client_code TEXT NOT NULL,
+    broker TEXT NOT NULL,
+    team_name TEXT NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    entry_price DECIMAL(10, 2),
+    exit_price DECIMAL(10, 2),
+    pnl DECIMAL(12, 2),
+    status TEXT NOT NULL DEFAULT 'Open',
+    remark TEXT,
+    tag TEXT,
+    entry_time TIME,
+    exit_time TIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes for manual trade entries
+CREATE INDEX IF NOT EXISTS idx_manual_trade_date ON manual_trade_entries(trade_date);
+CREATE INDEX IF NOT EXISTS idx_manual_strategy ON manual_trade_entries(strategy);
+CREATE INDEX IF NOT EXISTS idx_manual_exchange ON manual_trade_entries(exchange);
+CREATE INDEX IF NOT EXISTS idx_manual_status ON manual_trade_entries(status);
+
+-- ============================================
 -- TRIGGER FOR UPDATED_AT
 -- ============================================
 
@@ -117,6 +155,12 @@ CREATE TRIGGER IF NOT EXISTS update_trader_entries_timestamp
 AFTER UPDATE ON trader_entries
 BEGIN
     UPDATE trader_entries SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS update_manual_trade_entries_timestamp
+AFTER UPDATE ON manual_trade_entries
+BEGIN
+    UPDATE manual_trade_entries SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
 
 -- ============================================
