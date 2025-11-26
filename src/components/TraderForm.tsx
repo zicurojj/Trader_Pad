@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
+import { useAuth } from "@/contexts/AuthContext"
 import { Button } from "@/components/ui/button"
 import {
   Form,
@@ -46,6 +47,7 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>
 
 export function TraderForm() {
+  const { token } = useAuth()
   const todayDate = new Date().toISOString().split('T')[0]
   const [entries, setEntries] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -130,6 +132,7 @@ export function TraderForm() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           trade_date: values.date,
@@ -193,6 +196,7 @@ export function TraderForm() {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           trade_date: updatedEntry.trade_date || updatedEntry.date,

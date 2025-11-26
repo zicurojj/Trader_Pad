@@ -1,5 +1,7 @@
-import { Link, Outlet, useLocation } from 'react-router-dom';
-import { FileText, Settings, Grid3x3 } from 'lucide-react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { FileText, Settings, Grid3x3, Users, LogOut } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
 import {
   Sidebar,
   SidebarContent,
@@ -18,20 +20,36 @@ import {
 
 export function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const navItems = [
-    { path: '/admin/trade-entry', label: 'Trade Entry', icon: FileText },
-    { path: '/admin/manual-trade-entry', label: 'Manual Trade Entry', icon: Grid3x3 },
-    { path: '/admin/masters', label: 'Masters', icon: Settings },
+    { path: '/trade-entry', label: 'Trade Entry', icon: FileText },
+    { path: '/manual-trade-entry', label: 'Manual Trade Entry', icon: Grid3x3 },
+    { path: '/masters', label: 'Masters', icon: Settings },
   ];
 
+  const adminNavItems = user?.role === 'admin'
+    ? [{ path: '/user-management', label: 'User Management', icon: Users }]
+    : [];
+
   const isActive = (path: string) => location.pathname === path;
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
 
   return (
     <SidebarProvider>
       <Sidebar variant="inset" collapsible="icon">
         <SidebarHeader>
-          <h1 className="px-2 text-lg font-semibold group-data-[collapsible=icon]:hidden">Admin Panel</h1>
+          <h1 className="px-2 text-lg font-semibold group-data-[collapsible=icon]:hidden">
+            Trader Entry System
+          </h1>
+          <p className="px-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
+            {user?.username} ({user?.role})
+          </p>
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
@@ -51,6 +69,40 @@ export function Layout() {
                     </SidebarMenuItem>
                   );
                 })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+          {adminNavItems.length > 0 && (
+            <SidebarGroup>
+              <SidebarGroupLabel>Administration</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {adminNavItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <SidebarMenuItem key={item.path}>
+                        <SidebarMenuButton asChild isActive={isActive(item.path)}>
+                          <Link to={item.path}>
+                            <Icon className="h-4 w-4" />
+                            <span>{item.label}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+          <SidebarGroup className="mt-auto">
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton onClick={handleLogout}>
+                    <LogOut className="h-4 w-4" />
+                    <span>Logout</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

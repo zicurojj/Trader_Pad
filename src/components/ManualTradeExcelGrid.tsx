@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { KeyboardEvent } from 'react'
 import { Plus, Save, Trash2, Download } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -70,6 +71,7 @@ const COLUMNS = [
 ] as const
 
 export function ManualTradeExcelGrid({}: ExcelGridProps) {
+  const { token } = useAuth()
   const todayDate = new Date().toISOString().split('T')[0]
   const [selectedDate, setSelectedDate] = useState<string>(todayDate)
   const [entries, setEntries] = useState<Partial<ManualTradeEntryCreate>[]>([{ ...DEFAULT_ENTRY, tradeDate: todayDate }])
@@ -298,6 +300,7 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(backendEntry),
       })
@@ -354,6 +357,7 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
           },
           body: JSON.stringify(backendEntries),
         })

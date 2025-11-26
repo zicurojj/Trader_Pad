@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 class TradeEntryBase(BaseModel):
@@ -131,3 +131,51 @@ class ManualTradeEntryResponse(ManualTradeEntryBase):
     class Config:
         from_attributes = True
         populate_by_name = True
+
+
+# ============================================
+# AUTHENTICATION MODELS
+# ============================================
+
+class LoginRequest(BaseModel):
+    """Model for login request"""
+    username: str
+    password: str
+
+class LoginResponse(BaseModel):
+    """Model for login response"""
+    token: str
+    username: str
+    role: str
+    message: str
+
+class UserBase(BaseModel):
+    """Base model for User"""
+    username: str
+
+class UserCreate(UserBase):
+    """Model for creating a new user"""
+    password: str
+    role: str = "user"
+
+class UserUpdate(BaseModel):
+    """Model for updating user password"""
+    password: str
+
+class UserResponse(UserBase):
+    """Model for returning user data"""
+    id: int
+    role: str
+    last_login: Optional[str] = Field(None, alias="lastLogin")
+    created_at: str = Field(..., alias="createdAt")
+    updated_at: str = Field(..., alias="updatedAt")
+
+    class Config:
+        from_attributes = True
+        populate_by_name = True
+
+class SessionResponse(BaseModel):
+    """Model for session validation response"""
+    valid: bool
+    username: Optional[str] = None
+    role: Optional[str] = None

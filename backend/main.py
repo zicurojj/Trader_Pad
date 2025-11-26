@@ -1,7 +1,7 @@
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Header
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import date
-from typing import List
+from typing import List, Optional
 
 from models import (
     TradeEntryCreate,
@@ -13,10 +13,17 @@ from models import (
     MasterCategoryResponse,
     ManualTradeEntryCreate,
     ManualTradeEntryUpdate,
-    ManualTradeEntryResponse
+    ManualTradeEntryResponse,
+    LoginRequest,
+    LoginResponse,
+    UserCreate,
+    UserUpdate,
+    UserResponse,
+    SessionResponse
 )
 from database import get_db
 import crud
+import auth
 
 # Create FastAPI app
 app = FastAPI(
@@ -46,7 +53,7 @@ def read_root():
 
 
 @app.post("/api/trade-entries", response_model=TradeEntryResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
-def create_trade_entry(entry: TradeEntryCreate):
+def create_trade_entry(entry: TradeEntryCreate, authorization: Optional[str] = Header(None)):
     """
     Create a new trade entry.
 
@@ -54,8 +61,12 @@ def create_trade_entry(entry: TradeEntryCreate):
     - Returns the created entry with ID and timestamps
     """
     try:
+        # Verify authentication and get user session
+        session = auth.verify_token(authorization)
+        user_id = session["user_id"]
+
         with get_db() as conn:
-            entry_id = crud.create_trade_entry(conn, entry)
+            entry_id = crud.create_trade_entry(conn, entry, user_id)
             created_entry = crud.get_trade_entry_by_id(conn, entry_id)
 
             if not created_entry:
@@ -142,7 +153,7 @@ def get_trade_entry(entry_id: int):
 
 
 @app.put("/api/trade-entries/{entry_id}", response_model=TradeEntryResponse, response_model_by_alias=True)
-def update_trade_entry(entry_id: int, entry: TradeEntryUpdate):
+def update_trade_entry(entry_id: int, entry: TradeEntryUpdate, authorization: Optional[str] = Header(None)):
     """
     Update an existing trade entry.
 
@@ -151,8 +162,12 @@ def update_trade_entry(entry_id: int, entry: TradeEntryUpdate):
     - Returns the updated entry
     """
     try:
+        # Verify authentication and get user session
+        session = auth.verify_token(authorization)
+        user_id = session["user_id"]
+
         with get_db() as conn:
-            success = crud.update_trade_entry(conn, entry_id, entry)
+            success = crud.update_trade_entry(conn, entry_id, entry, user_id)
 
             if not success:
                 raise HTTPException(
@@ -349,7 +364,7 @@ def delete_master_value(category: str, value_id: int):
 # ============================================
 
 @app.post("/api/manual-trade-entries", response_model=ManualTradeEntryResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
-def create_manual_trade_entry(entry: ManualTradeEntryCreate):
+def create_manual_trade_entry(entry: ManualTradeEntryCreate, authorization: Optional[str] = Header(None)):
     """
     Create a new manual trade entry.
 
@@ -357,8 +372,12 @@ def create_manual_trade_entry(entry: ManualTradeEntryCreate):
     - Returns the created entry with ID and timestamps
     """
     try:
+        # Verify authentication and get user session
+        session = auth.verify_token(authorization)
+        user_id = session["user_id"]
+
         with get_db() as conn:
-            entry_id = crud.create_manual_trade_entry(conn, entry)
+            entry_id = crud.create_manual_trade_entry(conn, entry, user_id)
             created_entry = crud.get_manual_trade_entry_by_id(conn, entry_id)
 
             if not created_entry:
@@ -377,7 +396,7 @@ def create_manual_trade_entry(entry: ManualTradeEntryCreate):
 
 
 @app.post("/api/manual-trade-entries/bulk", response_model=List[ManualTradeEntryResponse], response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
-def bulk_create_manual_trade_entries(entries: List[ManualTradeEntryCreate]):
+def bulk_create_manual_trade_entries(entries: List[ManualTradeEntryCreate], authorization: Optional[str] = Header(None)):
     """
     Create multiple manual trade entries at once.
 
@@ -385,10 +404,14 @@ def bulk_create_manual_trade_entries(entries: List[ManualTradeEntryCreate]):
     - Returns the list of created entries with IDs and timestamps
     """
     try:
+        # Verify authentication and get user session
+        session = auth.verify_token(authorization)
+        user_id = session["user_id"]
+
         with get_db() as conn:
-            entry_ids = crud.bulk_create_manual_trade_entries(conn, entries)
+            entry_ids = crud.bulk_create_manual_trade_entries(conn, entries, user_id)
             created_entries = []
-            
+
             for entry_id in entry_ids:
                 entry = crud.get_manual_trade_entry_by_id(conn, entry_id)
                 if entry:
@@ -472,7 +495,7 @@ def get_manual_trade_entry(entry_id: int):
 
 
 @app.put("/api/manual-trade-entries/{entry_id}", response_model=ManualTradeEntryResponse, response_model_by_alias=True)
-def update_manual_trade_entry(entry_id: int, entry: ManualTradeEntryUpdate):
+def update_manual_trade_entry(entry_id: int, entry: ManualTradeEntryUpdate, authorization: Optional[str] = Header(None)):
     """
     Update an existing manual trade entry.
 
@@ -481,8 +504,12 @@ def update_manual_trade_entry(entry_id: int, entry: ManualTradeEntryUpdate):
     - Returns the updated entry
     """
     try:
+        # Verify authentication and get user session
+        session = auth.verify_token(authorization)
+        user_id = session["user_id"]
+
         with get_db() as conn:
-            success = crud.update_manual_trade_entry(conn, entry_id, entry)
+            success = crud.update_manual_trade_entry(conn, entry_id, entry, user_id)
 
             if not success:
                 raise HTTPException(
@@ -531,6 +558,258 @@ def delete_manual_trade_entry(entry_id: int):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting manual trade entry: {str(e)}"
+        )
+
+
+# ============================================
+# AUTHENTICATION ENDPOINTS
+# ============================================
+
+@app.post("/api/auth/login", response_model=LoginResponse)
+def login(credentials: LoginRequest):
+    """
+    Authenticate user and create session.
+
+    - **username**: User's username
+    - **password**: User's password
+    - Returns session token and user info
+    """
+    try:
+        with get_db() as conn:
+            user = crud.get_user_by_username(conn, credentials.username)
+
+            if not user or user["password"] != credentials.password:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid username or password"
+                )
+
+            # Update last login
+            crud.update_last_login(conn, user["id"])
+
+            # Create session
+            token = auth.create_session(user["id"], user["username"], user["role"])
+
+            return {
+                "token": token,
+                "username": user["username"],
+                "role": user["role"],
+                "message": "Login successful"
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error during login: {str(e)}"
+        )
+
+
+@app.post("/api/auth/logout")
+def logout(authorization: Optional[str] = Header(None)):
+    """
+    Logout user and destroy session.
+
+    - Requires valid authorization token
+    - Returns success message
+    """
+    try:
+        session = auth.verify_token(authorization)
+        token = authorization.replace("Bearer ", "")
+        auth.delete_session(token)
+
+        return {"message": "Logout successful"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error during logout: {str(e)}"
+        )
+
+
+@app.get("/api/auth/validate", response_model=SessionResponse)
+def validate_session(authorization: Optional[str] = Header(None)):
+    """
+    Validate current session.
+
+    - Requires valid authorization token
+    - Returns session validity and user info
+    """
+    try:
+        session = auth.verify_token(authorization)
+
+        return {
+            "valid": True,
+            "username": session["username"],
+            "role": session["role"]
+        }
+
+    except HTTPException:
+        return {
+            "valid": False,
+            "username": None,
+            "role": None
+        }
+
+
+# ============================================
+# USER MANAGEMENT ENDPOINTS (Admin Only)
+# ============================================
+
+@app.get("/api/users", response_model=List[UserResponse], response_model_by_alias=True)
+def get_all_users(authorization: Optional[str] = Header(None)):
+    """
+    Get all users (Admin only).
+
+    - Requires admin authorization
+    - Returns list of all users
+    """
+    try:
+        auth.verify_admin(authorization)
+
+        with get_db() as conn:
+            users = crud.get_all_users(conn)
+            return users
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching users: {str(e)}"
+        )
+
+
+@app.post("/api/users", response_model=UserResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+def create_user(user: UserCreate, authorization: Optional[str] = Header(None)):
+    """
+    Create a new user (Admin only).
+
+    - Requires admin authorization
+    - **user**: User data (username, password, role)
+    - Returns created user info
+    """
+    try:
+        auth.verify_admin(authorization)
+
+        with get_db() as conn:
+            # Check if username already exists
+            existing_user = crud.get_user_by_username(conn, user.username)
+            if existing_user:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username already exists"
+                )
+
+            user_id = crud.create_user(conn, user)
+            created_user = crud.get_user_by_id(conn, user_id)
+
+            return created_user
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating user: {str(e)}"
+        )
+
+
+@app.put("/api/users/{user_id}/password", response_model=UserResponse, response_model_by_alias=True)
+def reset_user_password(user_id: int, user_update: UserUpdate, authorization: Optional[str] = Header(None)):
+    """
+    Reset user password (Admin only).
+
+    - Requires admin authorization
+    - **user_id**: User ID
+    - **user_update**: New password
+    - Returns updated user info
+    """
+    try:
+        auth.verify_admin(authorization)
+
+        with get_db() as conn:
+            # Check if user exists
+            user = crud.get_user_by_id(conn, user_id)
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"User with ID {user_id} not found"
+                )
+
+            success = crud.update_user_password(conn, user_id, user_update.password)
+            if not success:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to update password"
+                )
+
+            updated_user = crud.get_user_by_id(conn, user_id)
+            return updated_user
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error resetting password: {str(e)}"
+        )
+
+
+@app.delete("/api/users/{user_id}", response_model=DeleteResponse)
+def delete_user(user_id: int, authorization: Optional[str] = Header(None)):
+    """
+    Delete a user (Admin only).
+
+    - Requires admin authorization
+    - **user_id**: User ID to delete
+    - Logs out all sessions for the user
+    - Returns success message
+    """
+    try:
+        auth.verify_admin(authorization)
+
+        with get_db() as conn:
+            # Get user info before deletion
+            user = crud.get_user_by_id(conn, user_id)
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"User with ID {user_id} not found"
+                )
+
+            # Prevent deleting the admin user
+            if user["role"] == "admin":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot delete admin user"
+                )
+
+            # Delete all sessions for this user (immediate logout)
+            auth.delete_user_sessions(user["username"])
+
+            # Delete user from database
+            success = crud.delete_user(conn, user_id)
+            if not success:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to delete user"
+                )
+
+            return {
+                "message": "User deleted successfully",
+                "id": user_id
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting user: {str(e)}"
         )
 
 

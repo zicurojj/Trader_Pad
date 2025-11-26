@@ -1,8 +1,8 @@
-from datetime import date
-from models import TradeEntryCreate, TradeEntryUpdate, ManualTradeEntryCreate, ManualTradeEntryUpdate
+from datetime import date, datetime
+from models import TradeEntryCreate, TradeEntryUpdate, ManualTradeEntryCreate, ManualTradeEntryUpdate, UserCreate, UserUpdate
 from typing import List, Optional
 
-def create_trade_entry(conn, entry: TradeEntryCreate) -> int:
+def create_trade_entry(conn, entry: TradeEntryCreate, user_id: int) -> int:
     """
     Create a new trade entry in the database.
     Returns the ID of the created entry.
@@ -10,11 +10,12 @@ def create_trade_entry(conn, entry: TradeEntryCreate) -> int:
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO trader_entries (
-            trade_date, strategy, code, exchange, commodity, expiry,
+            user_id, trade_date, strategy, code, exchange, commodity, expiry,
             contract_type, trade_type, strike_price, option_type,
             client_code, broker, team_name, status, remark, tag
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
+        user_id,
         entry.trade_date,
         entry.strategy,
         entry.code,
@@ -66,7 +67,7 @@ def get_trade_entry_by_id(conn, entry_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
-def update_trade_entry(conn, entry_id: int, entry: TradeEntryUpdate) -> bool:
+def update_trade_entry(conn, entry_id: int, entry: TradeEntryUpdate, user_id: int) -> bool:
     """
     Update an existing trade entry.
     Returns True if successful, False if entry not found.
@@ -74,6 +75,7 @@ def update_trade_entry(conn, entry_id: int, entry: TradeEntryUpdate) -> bool:
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE trader_entries SET
+            user_id = ?,
             trade_date = ?,
             strategy = ?,
             code = ?,
@@ -92,6 +94,7 @@ def update_trade_entry(conn, entry_id: int, entry: TradeEntryUpdate) -> bool:
             tag = ?
         WHERE id = ?
     """, (
+        user_id,
         entry.trade_date,
         entry.strategy,
         entry.code,
@@ -236,7 +239,7 @@ def delete_master_value(conn, category: str, value_id: int) -> bool:
 # MANUAL TRADE ENTRIES CRUD OPERATIONS
 # ============================================
 
-def create_manual_trade_entry(conn, entry: ManualTradeEntryCreate) -> int:
+def create_manual_trade_entry(conn, entry: ManualTradeEntryCreate, user_id: int) -> int:
     """
     Create a new manual trade entry in the database.
     Returns the ID of the created entry.
@@ -244,12 +247,13 @@ def create_manual_trade_entry(conn, entry: ManualTradeEntryCreate) -> int:
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO manual_trade_entries (
-            trade_date, strategy, code, exchange, commodity, expiry,
+            user_id, trade_date, strategy, code, exchange, commodity, expiry,
             contract_type, trade_type, strike_price, option_type,
             client_code, broker, team_name, quantity, entry_price,
             exit_price, pnl, status, remark, tag, entry_time, exit_time
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
+        user_id,
         entry.trade_date,
         entry.strategy,
         entry.code,
@@ -307,7 +311,7 @@ def get_manual_trade_entry_by_id(conn, entry_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
-def update_manual_trade_entry(conn, entry_id: int, entry: ManualTradeEntryUpdate) -> bool:
+def update_manual_trade_entry(conn, entry_id: int, entry: ManualTradeEntryUpdate, user_id: int) -> bool:
     """
     Update an existing manual trade entry.
     Returns True if successful, False if entry not found.
@@ -315,6 +319,7 @@ def update_manual_trade_entry(conn, entry_id: int, entry: ManualTradeEntryUpdate
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE manual_trade_entries SET
+            user_id = ?,
             trade_date = ?,
             strategy = ?,
             code = ?,
@@ -339,6 +344,7 @@ def update_manual_trade_entry(conn, entry_id: int, entry: ManualTradeEntryUpdate
             exit_time = ?
         WHERE id = ?
     """, (
+        user_id,
         entry.trade_date,
         entry.strategy,
         entry.code,
@@ -394,23 +400,24 @@ def get_all_manual_trade_entries(conn) -> List[dict]:
     return [dict(row) for row in rows]
 
 
-def bulk_create_manual_trade_entries(conn, entries: List[ManualTradeEntryCreate]) -> List[int]:
+def bulk_create_manual_trade_entries(conn, entries: List[ManualTradeEntryCreate], user_id: int) -> List[int]:
     """
     Create multiple manual trade entries in a single transaction.
     Returns a list of IDs of the created entries.
     """
     cursor = conn.cursor()
     created_ids = []
-    
+
     for entry in entries:
         cursor.execute("""
             INSERT INTO manual_trade_entries (
-                trade_date, strategy, code, exchange, commodity, expiry,
+                user_id, trade_date, strategy, code, exchange, commodity, expiry,
                 contract_type, trade_type, strike_price, option_type,
                 client_code, broker, team_name, quantity, entry_price,
                 exit_price, pnl, status, remark, tag, entry_time, exit_time
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
+            user_id,
             entry.trade_date,
             entry.strategy,
             entry.code,
@@ -435,5 +442,135 @@ def bulk_create_manual_trade_entries(conn, entries: List[ManualTradeEntryCreate]
             entry.exit_time
         ))
         created_ids.append(cursor.lastrowid)
-    
+
     return created_ids
+
+
+# ============================================
+# AUTHENTICATION CRUD OPERATIONS
+# ============================================
+
+def get_user_by_username(conn, username: str) -> Optional[dict]:
+    """
+    Get user by username.
+    Returns user dict or None if not found.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, username, password, role, last_login, created_at, updated_at
+        FROM users
+        WHERE username = ?
+    """, (username,))
+
+    row = cursor.fetchone()
+    if row:
+        return {
+            "id": row[0],
+            "username": row[1],
+            "password": row[2],
+            "role": row[3],
+            "last_login": row[4],
+            "created_at": row[5],
+            "updated_at": row[6]
+        }
+    return None
+
+
+def get_user_by_id(conn, user_id: int) -> Optional[dict]:
+    """
+    Get user by ID.
+    Returns user dict or None if not found.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, username, password, role, last_login, created_at, updated_at
+        FROM users
+        WHERE id = ?
+    """, (user_id,))
+
+    row = cursor.fetchone()
+    if row:
+        return {
+            "id": row[0],
+            "username": row[1],
+            "password": row[2],
+            "role": row[3],
+            "last_login": row[4],
+            "created_at": row[5],
+            "updated_at": row[6]
+        }
+    return None
+
+
+def get_all_users(conn) -> List[dict]:
+    """
+    Get all users (excluding passwords).
+    Returns list of user dicts.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, username, role, last_login, created_at, updated_at
+        FROM users
+        ORDER BY created_at DESC
+    """)
+
+    rows = cursor.fetchall()
+    return [{
+        "id": row[0],
+        "username": row[1],
+        "role": row[2],
+        "last_login": row[3],
+        "created_at": row[4],
+        "updated_at": row[5]
+    } for row in rows]
+
+
+def create_user(conn, user: UserCreate) -> int:
+    """
+    Create a new user.
+    Returns the ID of the created user.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO users (username, password, role)
+        VALUES (?, ?, ?)
+    """, (user.username, user.password, user.role))
+    return cursor.lastrowid
+
+
+def update_user_password(conn, user_id: int, password: str) -> bool:
+    """
+    Update user password.
+    Returns True if successful, False otherwise.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE users
+        SET password = ?
+        WHERE id = ?
+    """, (password, user_id))
+    return cursor.rowcount > 0
+
+
+def update_last_login(conn, user_id: int) -> bool:
+    """
+    Update user's last login timestamp.
+    Returns True if successful, False otherwise.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE users
+        SET last_login = CURRENT_TIMESTAMP
+        WHERE id = ?
+    """, (user_id,))
+    return cursor.rowcount > 0
+
+
+def delete_user(conn, user_id: int) -> bool:
+    """
+    Delete a user by ID.
+    Returns True if successful, False otherwise.
+    """
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    return cursor.rowcount > 0

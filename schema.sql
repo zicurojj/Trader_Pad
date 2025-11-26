@@ -2,6 +2,32 @@
 -- Database: trader_entries.db
 
 -- ============================================
+-- AUTHENTICATION TABLES
+-- ============================================
+
+-- Users Table
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'user',
+    last_login DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create trigger for users updated_at
+CREATE TRIGGER IF NOT EXISTS update_users_timestamp
+AFTER UPDATE ON users
+BEGIN
+    UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+-- Insert default admin user (password: admin123)
+INSERT OR IGNORE INTO users (username, password, role) VALUES
+    ('admin', 'admin123', 'admin');
+
+-- ============================================
 -- MASTER TABLES
 -- ============================================
 
@@ -81,6 +107,7 @@ CREATE TABLE IF NOT EXISTS master_team_name (
 
 CREATE TABLE IF NOT EXISTS trader_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
     trade_date DATE NOT NULL,
     strategy TEXT NOT NULL,
     code TEXT NOT NULL,
@@ -98,10 +125,12 @@ CREATE TABLE IF NOT EXISTS trader_entries (
     remark TEXT,
     tag TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 -- Create indexes for better query performance
+CREATE INDEX IF NOT EXISTS idx_user_id ON trader_entries(user_id);
 CREATE INDEX IF NOT EXISTS idx_trade_date ON trader_entries(trade_date);
 CREATE INDEX IF NOT EXISTS idx_strategy ON trader_entries(strategy);
 CREATE INDEX IF NOT EXISTS idx_exchange ON trader_entries(exchange);
@@ -115,6 +144,7 @@ CREATE INDEX IF NOT EXISTS idx_status ON trader_entries(status);
 
 CREATE TABLE IF NOT EXISTS manual_trade_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
     trade_date DATE NOT NULL,
     strategy TEXT NOT NULL,
     code TEXT NOT NULL,
@@ -138,10 +168,12 @@ CREATE TABLE IF NOT EXISTS manual_trade_entries (
     entry_time TIME,
     exit_time TIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 -- Create indexes for manual trade entries
+CREATE INDEX IF NOT EXISTS idx_manual_user_id ON manual_trade_entries(user_id);
 CREATE INDEX IF NOT EXISTS idx_manual_trade_date ON manual_trade_entries(trade_date);
 CREATE INDEX IF NOT EXISTS idx_manual_strategy ON manual_trade_entries(strategy);
 CREATE INDEX IF NOT EXISTS idx_manual_exchange ON manual_trade_entries(exchange);
@@ -247,30 +279,30 @@ INSERT OR IGNORE INTO master_team_name (name) VALUES
 -- ============================================
 
 INSERT INTO trader_entries (
-    trade_date, strategy, code, exchange, commodity, expiry, contract_type,
+    user_id, trade_date, strategy, code, exchange, commodity, expiry, contract_type,
     trade_type, strike_price, option_type, client_code, broker, team_name,
     status, remark, tag
 ) VALUES
-    ('2025-01-20', 'Scalping', 'NIFTY', 'NSE', 'Index', '2025-01-30', 'Futures',
+    (1, '2025-01-20', 'Scalping', 'NIFTY', 'NSE', 'Index', '2025-01-30', 'Futures',
      'Buy', 23500.00, 'N/A', 'CLI001', 'Zerodha', 'Morning Team', 'Active', 'Morning trade', 'Intraday'),
 
-    ('2025-01-20', 'Day Trading', 'BANKNIFTY', 'NSE', 'Index', '2025-01-30', 'Options',
+    (1, '2025-01-20', 'Day Trading', 'BANKNIFTY', 'NSE', 'Index', '2025-01-30', 'Options',
      'Sell', 48000.00, 'Call', 'CLI002', 'Upstox', 'Evening Team', 'Closed', 'Profit booking', 'Positional'),
 
-    ('2025-01-20', 'Swing Trading', 'RELIANCE', 'BSE', 'Equity', '2025-02-27', 'Futures',
+    (1, '2025-01-20', 'Swing Trading', 'RELIANCE', 'BSE', 'Equity', '2025-02-27', 'Futures',
      'Buy', 2850.00, 'N/A', 'CLI003', 'Angel One', 'Morning Team', 'Active', 'Long position', 'Swing'),
 
-    ('2025-01-20', 'Arbitrage', 'GOLD', 'MCX', 'Precious Metal', '2025-02-05', 'Spot',
+    (1, '2025-01-20', 'Arbitrage', 'GOLD', 'MCX', 'Precious Metal', '2025-02-05', 'Spot',
      'Buy', 62000.00, 'N/A', 'CLI004', 'ICICI Direct', 'Evening Team', 'Pending', 'Arbitrage opportunity', 'Commodity'),
 
-    ('2025-01-20', 'Position Trading', 'CRUDE', 'MCX', 'Energy', '2025-01-19', 'Futures',
+    (1, '2025-01-20', 'Position Trading', 'CRUDE', 'MCX', 'Energy', '2025-01-19', 'Futures',
      'Sell', 6500.00, 'N/A', 'CLI005', 'Kotak Securities', 'Morning Team', 'Active', 'Bearish outlook', 'Commodity'),
 
-    ('2025-01-20', 'Day Trading', 'FINNIFTY', 'NSE', 'Index', '2025-01-28', 'Options',
+    (1, '2025-01-20', 'Day Trading', 'FINNIFTY', 'NSE', 'Index', '2025-01-28', 'Options',
      'Buy', 22000.00, 'Put', 'CLI001', 'Zerodha', 'Evening Team', 'Active', 'Hedging position', 'Intraday'),
 
-    ('2025-01-20', 'Scalping', 'SILVER', 'MCX', 'Precious Metal', '2025-03-05', 'Futures',
+    (1, '2025-01-20', 'Scalping', 'SILVER', 'MCX', 'Precious Metal', '2025-03-05', 'Futures',
      'Buy', 72000.00, 'N/A', 'CLI006', 'HDFC Securities', 'Morning Team', 'Closed', 'Quick profit', 'Commodity'),
 
-    ('2025-01-20', 'Swing Trading', 'TATASTEEL', 'NSE', 'Equity', '2025-01-30', 'Options',
+    (1, '2025-01-20', 'Swing Trading', 'TATASTEEL', 'NSE', 'Equity', '2025-01-30', 'Options',
      'Sell', 150.00, 'Call', 'CLI007', 'Upstox', 'Evening Team', 'Active', 'Covered call strategy', 'Positional');
