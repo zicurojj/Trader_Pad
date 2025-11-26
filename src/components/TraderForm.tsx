@@ -95,7 +95,11 @@ export function TraderForm() {
   const fetchEntries = async (date: string) => {
     try {
       setLoading(true)
-      const response = await fetch(`${API_BASE_URL}/trade-entries/date/${date}`)
+      const response = await fetch(`${API_BASE_URL}/trade-entries/date/${date}`, {
+        headers: {
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
+      })
       if (response.ok) {
         const data = await response.json()
         setEntries(data)
@@ -257,8 +261,8 @@ export function TraderForm() {
   }
 
   return (
-    <div className="container mx-auto py-10">
-      <div className="max-w-full mx-auto px-4">
+    <div className="w-full h-full py-6">
+      <div className="w-full px-4">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             {/* Header */}
@@ -291,8 +295,8 @@ export function TraderForm() {
               />
             </div>
 
-            {/* Remaining 15 fields in 3 rows × 5 columns */}
-            <div className="grid grid-cols-5 gap-6">
+            {/* Remaining 15 fields in responsive grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
               {/* Strategy - Dropdown */}
               <FormField
                 control={form.control}

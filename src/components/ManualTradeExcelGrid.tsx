@@ -122,7 +122,7 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
     if (entry.id) {
       try {
         setIsLoading(true)
-        const response = await fetch(`http://localhost:8000/api/manual-trade-entries/${entry.id}`, {
+        const response = await fetch(`${API_BASE_URL}/manual-trade-entries/${entry.id}`, {
           method: 'DELETE',
         })
         
@@ -296,7 +296,7 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
         tag: entry.tag,
       }
 
-      const response = await fetch('http://localhost:8000/api/manual-trade-entries', {
+      const response = await fetch(`${API_BASE_URL}/manual-trade-entries`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -353,7 +353,7 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
           tag: entry.tag,
         }))
 
-        const response = await fetch('http://localhost:8000/api/manual-trade-entries/bulk', {
+        const response = await fetch(`${API_BASE_URL}/manual-trade-entries/bulk`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -383,7 +383,7 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
     setIsLoading(true)
     try {
       const targetDate = date || selectedDate
-      const response = await fetch(`http://localhost:8000/api/manual-trade-entries/date/${targetDate}`)
+      const response = await fetch(`${API_BASE_URL}/manual-trade-entries/date/${targetDate}`)
       
       if (!response.ok) {
         throw new Error('Failed to load entries')

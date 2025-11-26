@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { FileText, Settings, Grid3x3, Users, LogOut } from 'lucide-react';
+import { FileText, Settings, Grid3x3, Users, LogOut, Database } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import {
@@ -30,7 +30,10 @@ export function Layout() {
   ];
 
   const adminNavItems = user?.role === 'admin'
-    ? [{ path: '/user-management', label: 'User Management', icon: Users }]
+    ? [
+        { path: '/all-entries', label: 'All Trade Entries', icon: Database },
+        { path: '/user-management', label: 'User Management', icon: Users }
+      ]
     : [];
 
   const isActive = (path: string) => location.pathname === path;
@@ -41,7 +44,7 @@ export function Layout() {
   };
 
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={false}>
       <Sidebar variant="inset" collapsible="icon">
         <SidebarHeader>
           <h1 className="px-2 text-lg font-semibold group-data-[collapsible=icon]:hidden">
@@ -115,7 +118,7 @@ export function Layout() {
             <SidebarTrigger className="-ml-1" />
           </div>
         </header>
-        <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+        <div className="flex flex-1 flex-col gap-4 p-4 pt-0 overflow-auto">
           <Outlet />
         </div>
       </SidebarInset>

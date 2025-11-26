@@ -85,16 +85,27 @@ def create_trade_entry(entry: TradeEntryCreate, authorization: Optional[str] = H
 
 
 @app.get("/api/trade-entries/date/{trade_date}", response_model=List[TradeEntryResponse], response_model_by_alias=True)
-def get_trade_entries_by_date(trade_date: date):
+def get_trade_entries_by_date(trade_date: date, authorization: Optional[str] = Header(None)):
     """
-    Get all trade entries for a specific date.
+    Get trade entries for a specific date.
+    - Admin users see all entries for the date
+    - Regular users see only their own entries for the date
 
     - **trade_date**: Date in YYYY-MM-DD format
     - Returns list of trade entries for that date
     """
     try:
+        # Verify authentication and get user session
+        session = auth.verify_token(authorization)
+        username = session["username"]
+        role = session.get("role")
+
         with get_db() as conn:
-            entries = crud.get_trade_entries_by_date(conn, trade_date)
+            # Admin sees all entries, regular users see only their own
+            if role == "admin":
+                entries = crud.get_trade_entries_by_date(conn, trade_date)
+            else:
+                entries = crud.get_trade_entries_by_date_and_username(conn, trade_date, username)
             return entries
 
     except Exception as e:
@@ -105,17 +116,27 @@ def get_trade_entries_by_date(trade_date: date):
 
 
 @app.get("/api/trade-entries", response_model=List[TradeEntryResponse], response_model_by_alias=True)
-def get_all_trade_entries():
+def get_all_trade_entries(authorization: Optional[str] = Header(None)):
     """
-    Get all trade entries (for testing/debugging).
+    Get all trade entries (admin only - returns all entries sorted by date).
 
     - Returns list of all trade entries
     """
     try:
+        # Verify authentication and check if user is admin
+        session = auth.verify_token(authorization)
+        if session.get("role") != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only admins can view all trade entries"
+            )
+
         with get_db() as conn:
             entries = crud.get_all_trade_entries(conn)
             return entries
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

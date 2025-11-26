@@ -5,6 +5,7 @@ import { ManualTradeEntry } from '@/pages/admin/ManualTradeEntry'
 import { Masters } from '@/pages/admin/Masters'
 import Login from '@/pages/Login'
 import UserManagement from '@/pages/admin/UserManagement'
+import { AllTradeEntries } from '@/pages/admin/AllTradeEntries'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { useAuth } from '@/contexts/AuthContext'
 import './App.css'
@@ -29,6 +30,11 @@ function App() {
           <Route path="trade-entry" element={<TradeEntry />} />
           <Route path="manual-trade-entry" element={<ManualTradeEntry />} />
           <Route path="masters" element={<Masters />} />
+          <Route path="all-entries" element={
+            <ProtectedRoute adminOnly>
+              <AllTradeEntries />
+            </ProtectedRoute>
+          } />
           <Route path="user-management" element={
             <ProtectedRoute adminOnly>
               <UserManagement />

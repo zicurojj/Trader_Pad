@@ -52,6 +52,22 @@ def get_trade_entries_by_date(conn, trade_date: date) -> List[dict]:
     return [dict(row) for row in rows]
 
 
+def get_trade_entries_by_date_and_username(conn, trade_date: date, username: str) -> List[dict]:
+    """
+    Get trade entries for a specific date and username.
+    Returns a list of dictionaries.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM trader_entries
+        WHERE trade_date = ? AND username = ?
+        ORDER BY created_at DESC
+    """, (trade_date, username))
+
+    rows = cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
 def get_trade_entry_by_id(conn, entry_id: int) -> Optional[dict]:
     """
     Get a single trade entry by ID.
