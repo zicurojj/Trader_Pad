@@ -63,10 +63,10 @@ def create_trade_entry(entry: TradeEntryCreate, authorization: Optional[str] = H
     try:
         # Verify authentication and get user session
         session = auth.verify_token(authorization)
-        user_id = session["user_id"]
+        username = session["username"]
 
         with get_db() as conn:
-            entry_id = crud.create_trade_entry(conn, entry, user_id)
+            entry_id = crud.create_trade_entry(conn, entry, username)
             created_entry = crud.get_trade_entry_by_id(conn, entry_id)
 
             if not created_entry:
@@ -164,10 +164,10 @@ def update_trade_entry(entry_id: int, entry: TradeEntryUpdate, authorization: Op
     try:
         # Verify authentication and get user session
         session = auth.verify_token(authorization)
-        user_id = session["user_id"]
+        username = session["username"]
 
         with get_db() as conn:
-            success = crud.update_trade_entry(conn, entry_id, entry, user_id)
+            success = crud.update_trade_entry(conn, entry_id, entry, username)
 
             if not success:
                 raise HTTPException(
@@ -374,10 +374,10 @@ def create_manual_trade_entry(entry: ManualTradeEntryCreate, authorization: Opti
     try:
         # Verify authentication and get user session
         session = auth.verify_token(authorization)
-        user_id = session["user_id"]
+        username = session["username"]
 
         with get_db() as conn:
-            entry_id = crud.create_manual_trade_entry(conn, entry, user_id)
+            entry_id = crud.create_manual_trade_entry(conn, entry, username)
             created_entry = crud.get_manual_trade_entry_by_id(conn, entry_id)
 
             if not created_entry:
@@ -406,10 +406,10 @@ def bulk_create_manual_trade_entries(entries: List[ManualTradeEntryCreate], auth
     try:
         # Verify authentication and get user session
         session = auth.verify_token(authorization)
-        user_id = session["user_id"]
+        username = session["username"]
 
         with get_db() as conn:
-            entry_ids = crud.bulk_create_manual_trade_entries(conn, entries, user_id)
+            entry_ids = crud.bulk_create_manual_trade_entries(conn, entries, username)
             created_entries = []
 
             for entry_id in entry_ids:
@@ -506,10 +506,10 @@ def update_manual_trade_entry(entry_id: int, entry: ManualTradeEntryUpdate, auth
     try:
         # Verify authentication and get user session
         session = auth.verify_token(authorization)
-        user_id = session["user_id"]
+        username = session["username"]
 
         with get_db() as conn:
-            success = crud.update_manual_trade_entry(conn, entry_id, entry, user_id)
+            success = crud.update_manual_trade_entry(conn, entry_id, entry, username)
 
             if not success:
                 raise HTTPException(

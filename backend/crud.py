@@ -2,7 +2,7 @@ from datetime import date, datetime
 from models import TradeEntryCreate, TradeEntryUpdate, ManualTradeEntryCreate, ManualTradeEntryUpdate, UserCreate, UserUpdate
 from typing import List, Optional
 
-def create_trade_entry(conn, entry: TradeEntryCreate, user_id: int) -> int:
+def create_trade_entry(conn, entry: TradeEntryCreate, username: str) -> int:
     """
     Create a new trade entry in the database.
     Returns the ID of the created entry.
@@ -10,12 +10,12 @@ def create_trade_entry(conn, entry: TradeEntryCreate, user_id: int) -> int:
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO trader_entries (
-            user_id, trade_date, strategy, code, exchange, commodity, expiry,
+            username, trade_date, strategy, code, exchange, commodity, expiry,
             contract_type, trade_type, strike_price, option_type,
             client_code, broker, team_name, status, remark, tag
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        user_id,
+        username,
         entry.trade_date,
         entry.strategy,
         entry.code,
@@ -67,7 +67,7 @@ def get_trade_entry_by_id(conn, entry_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
-def update_trade_entry(conn, entry_id: int, entry: TradeEntryUpdate, user_id: int) -> bool:
+def update_trade_entry(conn, entry_id: int, entry: TradeEntryUpdate, username: str) -> bool:
     """
     Update an existing trade entry.
     Returns True if successful, False if entry not found.
@@ -75,7 +75,7 @@ def update_trade_entry(conn, entry_id: int, entry: TradeEntryUpdate, user_id: in
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE trader_entries SET
-            user_id = ?,
+            username = ?,
             trade_date = ?,
             strategy = ?,
             code = ?,
@@ -94,7 +94,7 @@ def update_trade_entry(conn, entry_id: int, entry: TradeEntryUpdate, user_id: in
             tag = ?
         WHERE id = ?
     """, (
-        user_id,
+        username,
         entry.trade_date,
         entry.strategy,
         entry.code,
@@ -239,7 +239,7 @@ def delete_master_value(conn, category: str, value_id: int) -> bool:
 # MANUAL TRADE ENTRIES CRUD OPERATIONS
 # ============================================
 
-def create_manual_trade_entry(conn, entry: ManualTradeEntryCreate, user_id: int) -> int:
+def create_manual_trade_entry(conn, entry: ManualTradeEntryCreate, username: str) -> int:
     """
     Create a new manual trade entry in the database.
     Returns the ID of the created entry.
@@ -247,13 +247,13 @@ def create_manual_trade_entry(conn, entry: ManualTradeEntryCreate, user_id: int)
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO manual_trade_entries (
-            user_id, trade_date, strategy, code, exchange, commodity, expiry,
+            username, trade_date, strategy, code, exchange, commodity, expiry,
             contract_type, trade_type, strike_price, option_type,
             client_code, broker, team_name, quantity, entry_price,
             exit_price, pnl, status, remark, tag, entry_time, exit_time
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        user_id,
+        username,
         entry.trade_date,
         entry.strategy,
         entry.code,
@@ -311,7 +311,7 @@ def get_manual_trade_entry_by_id(conn, entry_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
-def update_manual_trade_entry(conn, entry_id: int, entry: ManualTradeEntryUpdate, user_id: int) -> bool:
+def update_manual_trade_entry(conn, entry_id: int, entry: ManualTradeEntryUpdate, username: str) -> bool:
     """
     Update an existing manual trade entry.
     Returns True if successful, False if entry not found.
@@ -319,7 +319,7 @@ def update_manual_trade_entry(conn, entry_id: int, entry: ManualTradeEntryUpdate
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE manual_trade_entries SET
-            user_id = ?,
+            username = ?,
             trade_date = ?,
             strategy = ?,
             code = ?,
@@ -344,7 +344,7 @@ def update_manual_trade_entry(conn, entry_id: int, entry: ManualTradeEntryUpdate
             exit_time = ?
         WHERE id = ?
     """, (
-        user_id,
+        username,
         entry.trade_date,
         entry.strategy,
         entry.code,
@@ -400,7 +400,7 @@ def get_all_manual_trade_entries(conn) -> List[dict]:
     return [dict(row) for row in rows]
 
 
-def bulk_create_manual_trade_entries(conn, entries: List[ManualTradeEntryCreate], user_id: int) -> List[int]:
+def bulk_create_manual_trade_entries(conn, entries: List[ManualTradeEntryCreate], username: str) -> List[int]:
     """
     Create multiple manual trade entries in a single transaction.
     Returns a list of IDs of the created entries.
@@ -411,13 +411,13 @@ def bulk_create_manual_trade_entries(conn, entries: List[ManualTradeEntryCreate]
     for entry in entries:
         cursor.execute("""
             INSERT INTO manual_trade_entries (
-                user_id, trade_date, strategy, code, exchange, commodity, expiry,
+                username, trade_date, strategy, code, exchange, commodity, expiry,
                 contract_type, trade_type, strike_price, option_type,
                 client_code, broker, team_name, quantity, entry_price,
                 exit_price, pnl, status, remark, tag, entry_time, exit_time
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            user_id,
+            username,
             entry.trade_date,
             entry.strategy,
             entry.code,
