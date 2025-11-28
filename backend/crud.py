@@ -166,13 +166,13 @@ def get_all_trade_entries(conn) -> List[dict]:
 
 # Mapping of master categories to their table names
 MASTER_TABLE_MAP = {
-    "Strategy": "master_strategy",
-    "Exchange": "master_exchange",
+    "Strategy": "strategy",
+    "Exchange": "exchange",
     "Contract Type": "master_contract_type",
     "Trade Type": "master_trade_type",
     "Option Type": "master_option_type",
-    "Code": "master_code",
-    "Commodity": "master_commodity",
+    "Code": "code",
+    "Commodity": "commodity",
     "Client Code": "master_client_code",
     "Broker": "master_broker",
     "Team Name": "master_team_name",
@@ -249,6 +249,64 @@ def delete_master_value(conn, category: str, value_id: int) -> bool:
     """, (value_id,))
 
     return cursor.rowcount > 0
+
+
+# ============================================
+# RELATIONAL QUERY FUNCTIONS
+# ============================================
+
+def get_codes_by_strategy(conn, strategy_id: int) -> List[dict]:
+    """
+    Get all codes associated with a specific strategy.
+    Returns a list of dictionaries with id, name, and created_at.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT c.id, c.name, c.created_at
+        FROM strategy_code sc
+        JOIN code c ON c.id = sc.code_id
+        WHERE sc.strategy_id = ?
+        ORDER BY c.name
+    """, (strategy_id,))
+
+    rows = cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_exchanges_by_code(conn, code_id: int) -> List[dict]:
+    """
+    Get all exchanges associated with a specific code.
+    Returns a list of dictionaries with id, name, and created_at.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT e.id, e.name, e.created_at
+        FROM code_exchange ce
+        JOIN exchange e ON e.id = ce.exchange_id
+        WHERE ce.code_id = ?
+        ORDER BY e.name
+    """, (code_id,))
+
+    rows = cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_commodities_by_exchange(conn, exchange_id: int) -> List[dict]:
+    """
+    Get all commodities associated with a specific exchange.
+    Returns a list of dictionaries with id, name, and created_at.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT cm.id, cm.name, cm.created_at
+        FROM exchange_commodity ec
+        JOIN commodity cm ON cm.id = ec.commodity_id
+        WHERE ec.exchange_id = ?
+        ORDER BY cm.name
+    """, (exchange_id,))
+
+    rows = cursor.fetchall()
+    return [dict(row) for row in rows]
 
 
 # ============================================

@@ -24,6 +24,7 @@ import { DatePicker } from "@/components/ui/date-picker"
 import { TraderDataGrid } from "@/components/TraderDataGrid"
 import type { MasterData } from "@/types"
 import { API_BASE_URL } from "@/constants"
+import { X } from "lucide-react"
 
 const formSchema = z.object({
   date: z.string(),
@@ -53,6 +54,14 @@ export function TraderForm() {
   const [loading, setLoading] = useState(false)
   const [masters, setMasters] = useState<MasterData>({})
   const [currentDate, setCurrentDate] = useState(todayDate)
+
+  // Cascading dropdown states
+  const [filteredCodes, setFilteredCodes] = useState<any[]>([])
+  const [filteredExchanges, setFilteredExchanges] = useState<any[]>([])
+  const [filteredCommodities, setFilteredCommodities] = useState<any[]>([])
+  const [selectedStrategyId, setSelectedStrategyId] = useState<number | null>(null)
+  const [selectedCodeId, setSelectedCodeId] = useState<number | null>(null)
+  const [selectedExchangeId, setSelectedExchangeId] = useState<number | null>(null)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -88,6 +97,57 @@ export function TraderForm() {
       }
     } catch (error) {
       console.error("Error fetching masters:", error)
+    }
+  }
+
+  // Fetch codes based on selected strategy
+  const fetchCodesByStrategy = async (strategyId: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/cascading/codes/${strategyId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setFilteredCodes(data)
+      } else {
+        console.error("Failed to fetch codes for strategy")
+        setFilteredCodes([])
+      }
+    } catch (error) {
+      console.error("Error fetching codes:", error)
+      setFilteredCodes([])
+    }
+  }
+
+  // Fetch exchanges based on selected code
+  const fetchExchangesByCode = async (codeId: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/cascading/exchanges/${codeId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setFilteredExchanges(data)
+      } else {
+        console.error("Failed to fetch exchanges for code")
+        setFilteredExchanges([])
+      }
+    } catch (error) {
+      console.error("Error fetching exchanges:", error)
+      setFilteredExchanges([])
+    }
+  }
+
+  // Fetch commodities based on selected exchange
+  const fetchCommoditiesByExchange = async (exchangeId: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/cascading/commodities/${exchangeId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setFilteredCommodities(data)
+      } else {
+        console.error("Failed to fetch commodities for exchange")
+        setFilteredCommodities([])
+      }
+    } catch (error) {
+      console.error("Error fetching commodities:", error)
+      setFilteredCommodities([])
     }
   }
 
@@ -304,20 +364,57 @@ export function TraderForm() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Strategy</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select strategy" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {masters.Strategy?.map((item) => (
-                          <SelectItem key={item.id} value={item.name}>
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="relative">
+                      <Select
+                        onValueChange={(value) => {
+                          field.onChange(value)
+                          // Find the selected strategy ID
+                          const selected = masters.Strategy?.find((item) => item.name === value)
+                          if (selected) {
+                            setSelectedStrategyId(selected.id)
+                            fetchCodesByStrategy(selected.id)
+                            // Reset dependent fields
+                            form.setValue("code", "")
+                            form.setValue("exchange", "")
+                            form.setValue("commodity", "")
+                            setFilteredExchanges([])
+                            setFilteredCommodities([])
+                          }
+                        }}
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select strategy" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {masters.Strategy?.map((item) => (
+                            <SelectItem key={item.id} value={item.name}>
+                              {item.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {field.value && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            field.onChange("")
+                            setSelectedStrategyId(null)
+                            setFilteredCodes([])
+                            setFilteredExchanges([])
+                            setFilteredCommodities([])
+                            form.setValue("code", "")
+                            form.setValue("exchange", "")
+                            form.setValue("commodity", "")
+                          }}
+                          className="absolute right-8 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -330,20 +427,54 @@ export function TraderForm() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Code</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select code" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {masters.Code?.map((item) => (
-                          <SelectItem key={item.id} value={item.name}>
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="relative">
+                      <Select
+                        onValueChange={(value) => {
+                          field.onChange(value)
+                          // Find the selected code ID
+                          const selected = filteredCodes.find((item) => item.name === value)
+                          if (selected) {
+                            setSelectedCodeId(selected.id)
+                            fetchExchangesByCode(selected.id)
+                            // Reset dependent fields
+                            form.setValue("exchange", "")
+                            form.setValue("commodity", "")
+                            setFilteredCommodities([])
+                          }
+                        }}
+                        value={field.value}
+                        disabled={!selectedStrategyId || filteredCodes.length === 0}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder={selectedStrategyId ? "Select code" : "Select strategy first"} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {filteredCodes.map((item) => (
+                            <SelectItem key={item.id} value={item.name}>
+                              {item.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {field.value && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            field.onChange("")
+                            setSelectedCodeId(null)
+                            setFilteredExchanges([])
+                            setFilteredCommodities([])
+                            form.setValue("exchange", "")
+                            form.setValue("commodity", "")
+                          }}
+                          className="absolute right-8 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -356,20 +487,50 @@ export function TraderForm() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Exchange</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select exchange" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {masters.Exchange?.map((item) => (
-                          <SelectItem key={item.id} value={item.name}>
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="relative">
+                      <Select
+                        onValueChange={(value) => {
+                          field.onChange(value)
+                          // Find the selected exchange ID
+                          const selected = filteredExchanges.find((item) => item.name === value)
+                          if (selected) {
+                            setSelectedExchangeId(selected.id)
+                            fetchCommoditiesByExchange(selected.id)
+                            // Reset dependent fields
+                            form.setValue("commodity", "")
+                          }
+                        }}
+                        value={field.value}
+                        disabled={!selectedCodeId || filteredExchanges.length === 0}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder={selectedCodeId ? "Select exchange" : "Select code first"} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {filteredExchanges.map((item) => (
+                            <SelectItem key={item.id} value={item.name}>
+                              {item.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {field.value && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            field.onChange("")
+                            setSelectedExchangeId(null)
+                            setFilteredCommodities([])
+                            form.setValue("commodity", "")
+                          }}
+                          className="absolute right-8 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -382,20 +543,37 @@ export function TraderForm() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Commodity</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select commodity" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {masters.Commodity?.map((item) => (
-                          <SelectItem key={item.id} value={item.name}>
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="relative">
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        disabled={!selectedExchangeId || filteredCommodities.length === 0}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder={selectedExchangeId ? "Select commodity" : "Select exchange first"} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {filteredCommodities.map((item) => (
+                            <SelectItem key={item.id} value={item.name}>
+                              {item.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {field.value && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            field.onChange("")
+                          }}
+                          className="absolute right-8 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}

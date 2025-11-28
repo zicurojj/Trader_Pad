@@ -381,6 +381,67 @@ def delete_master_value(category: str, value_id: int):
 
 
 # ============================================
+# CASCADING DROPDOWN ENDPOINTS
+# ============================================
+
+@app.get("/api/cascading/codes/{strategy_id}", response_model=List[MasterValueResponse], response_model_by_alias=True)
+def get_codes_by_strategy(strategy_id: int):
+    """
+    Get all codes associated with a specific strategy.
+
+    - **strategy_id**: Strategy ID
+    - Returns list of codes for that strategy
+    """
+    try:
+        with get_db() as conn:
+            codes = crud.get_codes_by_strategy(conn, strategy_id)
+            return codes
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching codes for strategy: {str(e)}"
+        )
+
+
+@app.get("/api/cascading/exchanges/{code_id}", response_model=List[MasterValueResponse], response_model_by_alias=True)
+def get_exchanges_by_code(code_id: int):
+    """
+    Get all exchanges associated with a specific code.
+
+    - **code_id**: Code ID
+    - Returns list of exchanges for that code
+    """
+    try:
+        with get_db() as conn:
+            exchanges = crud.get_exchanges_by_code(conn, code_id)
+            return exchanges
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching exchanges for code: {str(e)}"
+        )
+
+
+@app.get("/api/cascading/commodities/{exchange_id}", response_model=List[MasterValueResponse], response_model_by_alias=True)
+def get_commodities_by_exchange(exchange_id: int):
+    """
+    Get all commodities associated with a specific exchange.
+
+    - **exchange_id**: Exchange ID
+    - Returns list of commodities for that exchange
+    """
+    try:
+        with get_db() as conn:
+            commodities = crud.get_commodities_by_exchange(conn, exchange_id)
+            return commodities
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching commodities for exchange: {str(e)}"
+        )
+
+
+# ============================================
 # MANUAL TRADE ENTRIES ENDPOINTS
 # ============================================
 
