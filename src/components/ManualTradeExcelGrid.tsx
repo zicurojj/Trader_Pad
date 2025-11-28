@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { KeyboardEvent } from 'react'
-import { Plus, Save, Trash2, Download } from 'lucide-react'
+import { Plus, Save, Trash2, Download, X } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -80,6 +80,14 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
   const [masters, setMasters] = useState<MasterData>({})
   const [isReadOnlyMode, setIsReadOnlyMode] = useState(false)
 
+  // Cascading dropdown state for each row
+  const [filteredCodes, setFilteredCodes] = useState<{ [rowIndex: number]: any[] }>({})
+  const [filteredExchanges, setFilteredExchanges] = useState<{ [rowIndex: number]: any[] }>({})
+  const [filteredCommodities, setFilteredCommodities] = useState<{ [rowIndex: number]: any[] }>({})
+  const [selectedStrategyIds, setSelectedStrategyIds] = useState<{ [rowIndex: number]: number | null }>({})
+  const [selectedCodeIds, setSelectedCodeIds] = useState<{ [rowIndex: number]: number | null }>({})
+  const [selectedExchangeIds, setSelectedExchangeIds] = useState<{ [rowIndex: number]: number | null }>({})
+
   const gridRef = useRef<HTMLDivElement>(null)
   const inputRefs = useRef<{ [key: string]: HTMLInputElement | HTMLSelectElement }>({})
 
@@ -104,6 +112,43 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
       }
     } catch (error) {
       console.error('Error fetching masters:', error)
+    }
+  }
+
+  // Cascading dropdown API functions
+  const fetchCodesByStrategy = async (strategyId: number, rowIndex: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/cascading/codes/${strategyId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setFilteredCodes(prev => ({ ...prev, [rowIndex]: data }))
+      }
+    } catch (error) {
+      console.error('Error fetching codes:', error)
+    }
+  }
+
+  const fetchExchangesByCode = async (codeId: number, rowIndex: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/cascading/exchanges/${codeId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setFilteredExchanges(prev => ({ ...prev, [rowIndex]: data }))
+      }
+    } catch (error) {
+      console.error('Error fetching exchanges:', error)
+    }
+  }
+
+  const fetchCommoditiesByExchange = async (exchangeId: number, rowIndex: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/cascading/commodities/${exchangeId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setFilteredCommodities(prev => ({ ...prev, [rowIndex]: data }))
+      }
+    } catch (error) {
+      console.error('Error fetching commodities:', error)
     }
   }
 
@@ -220,14 +265,52 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
       )
     }
 
-    // Dropdown fields - always show dropdown
+    // Dropdown fields - handle cascading logic
     if (dropdownFields[column.key as keyof typeof dropdownFields]) {
-      const options = dropdownFields[column.key as keyof typeof dropdownFields]
+      let options = dropdownFields[column.key as keyof typeof dropdownFields]
+
+      // Apply cascading filters
+      if (column.key === 'code') {
+        options = filteredCodes[rowIndex] || []
+      } else if (column.key === 'exchange') {
+        options = filteredExchanges[rowIndex] || []
+      } else if (column.key === 'commodity') {
+        options = filteredCommodities[rowIndex] || []
+      }
+
       return (
-        <div className="w-full h-10">
+        <div className="w-full h-10 relative">
           <Select
             value={value || ''}
             onValueChange={(newValue) => {
+              const selectedItem = options.find((item: any) => item.name === newValue)
+
+              if (column.key === 'strategy' && selectedItem) {
+                setSelectedStrategyIds(prev => ({ ...prev, [rowIndex]: selectedItem.id }))
+                fetchCodesByStrategy(selectedItem.id, rowIndex)
+                updateEntry(rowIndex, 'code', '')
+                updateEntry(rowIndex, 'exchange', '')
+                updateEntry(rowIndex, 'commodity', '')
+                setFilteredCodes(prev => ({ ...prev, [rowIndex]: [] }))
+                setFilteredExchanges(prev => ({ ...prev, [rowIndex]: [] }))
+                setFilteredCommodities(prev => ({ ...prev, [rowIndex]: [] }))
+                setSelectedCodeIds(prev => ({ ...prev, [rowIndex]: null }))
+                setSelectedExchangeIds(prev => ({ ...prev, [rowIndex]: null }))
+              } else if (column.key === 'code' && selectedItem) {
+                setSelectedCodeIds(prev => ({ ...prev, [rowIndex]: selectedItem.id }))
+                fetchExchangesByCode(selectedItem.id, rowIndex)
+                updateEntry(rowIndex, 'exchange', '')
+                updateEntry(rowIndex, 'commodity', '')
+                setFilteredExchanges(prev => ({ ...prev, [rowIndex]: [] }))
+                setFilteredCommodities(prev => ({ ...prev, [rowIndex]: [] }))
+                setSelectedExchangeIds(prev => ({ ...prev, [rowIndex]: null }))
+              } else if (column.key === 'exchange' && selectedItem) {
+                setSelectedExchangeIds(prev => ({ ...prev, [rowIndex]: selectedItem.id }))
+                fetchCommoditiesByExchange(selectedItem.id, rowIndex)
+                updateEntry(rowIndex, 'commodity', '')
+                setFilteredCommodities(prev => ({ ...prev, [rowIndex]: [] }))
+              }
+
               updateEntry(rowIndex, column.key, newValue)
             }}
           >
@@ -248,6 +331,47 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
               )}
             </SelectContent>
           </Select>
+
+          {/* Clear button for cascading dropdowns */}
+          {value && ['strategy', 'code', 'exchange', 'commodity'].includes(column.key) && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+
+                if (column.key === 'strategy') {
+                  updateEntry(rowIndex, 'strategy', '')
+                  updateEntry(rowIndex, 'code', '')
+                  updateEntry(rowIndex, 'exchange', '')
+                  updateEntry(rowIndex, 'commodity', '')
+                  setSelectedStrategyIds(prev => ({ ...prev, [rowIndex]: null }))
+                  setSelectedCodeIds(prev => ({ ...prev, [rowIndex]: null }))
+                  setSelectedExchangeIds(prev => ({ ...prev, [rowIndex]: null }))
+                  setFilteredCodes(prev => ({ ...prev, [rowIndex]: [] }))
+                  setFilteredExchanges(prev => ({ ...prev, [rowIndex]: [] }))
+                  setFilteredCommodities(prev => ({ ...prev, [rowIndex]: [] }))
+                } else if (column.key === 'code') {
+                  updateEntry(rowIndex, 'code', '')
+                  updateEntry(rowIndex, 'exchange', '')
+                  updateEntry(rowIndex, 'commodity', '')
+                  setSelectedCodeIds(prev => ({ ...prev, [rowIndex]: null }))
+                  setSelectedExchangeIds(prev => ({ ...prev, [rowIndex]: null }))
+                  setFilteredExchanges(prev => ({ ...prev, [rowIndex]: [] }))
+                  setFilteredCommodities(prev => ({ ...prev, [rowIndex]: [] }))
+                } else if (column.key === 'exchange') {
+                  updateEntry(rowIndex, 'exchange', '')
+                  updateEntry(rowIndex, 'commodity', '')
+                  setSelectedExchangeIds(prev => ({ ...prev, [rowIndex]: null }))
+                  setFilteredCommodities(prev => ({ ...prev, [rowIndex]: [] }))
+                } else if (column.key === 'commodity') {
+                  updateEntry(rowIndex, 'commodity', '')
+                }
+              }}
+              className="absolute right-8 top-1/2 -translate-y-1/2 z-10 hover:bg-gray-200 rounded-full p-0.5"
+            >
+              <X className="h-3.5 w-3.5 text-gray-500" />
+            </button>
+          )}
         </div>
       )
     }
