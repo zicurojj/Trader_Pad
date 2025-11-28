@@ -38,6 +38,7 @@ class TradeEntryUpdate(TradeEntryBase):
 class TradeEntryResponse(TradeEntryBase):
     """Model for returning trade entry data (includes ID and timestamps)"""
     id: int
+    username: str
     created_at: str = Field(..., alias="createdAt")
     updated_at: str = Field(..., alias="updatedAt")
 
