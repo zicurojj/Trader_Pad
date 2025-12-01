@@ -11,9 +11,12 @@ class TradeEntryBase(BaseModel):
     commodity: str
     expiry: date
     contract_type: str = Field(..., alias="contractType")
-    trade_type: str = Field(..., alias="tradeType")
     strike_price: float = Field(..., alias="strikePrice")
     option_type: str = Field(..., alias="optionType")
+    buy_qty: Optional[int] = Field(None, alias="buyQty")
+    buy_avg: Optional[float] = Field(None, alias="buyAvg")
+    sell_qty: Optional[int] = Field(None, alias="sellQty")
+    sell_avg: Optional[float] = Field(None, alias="sellAvg")
     client_code: str = Field(..., alias="clientCode")
     broker: str
     team_name: str = Field(..., alias="teamName")
@@ -93,13 +96,15 @@ class ManualTradeEntryBase(BaseModel):
     commodity: str
     expiry: date
     contract_type: str = Field(..., alias="contractType")
-    trade_type: str = Field(..., alias="tradeType")
     strike_price: float = Field(..., alias="strikePrice")
     option_type: str = Field(..., alias="optionType")
+    buy_qty: Optional[int] = Field(None, alias="buyQty")
+    buy_avg: Optional[float] = Field(None, alias="buyAvg")
+    sell_qty: Optional[int] = Field(None, alias="sellQty")
+    sell_avg: Optional[float] = Field(None, alias="sellAvg")
     client_code: str = Field(..., alias="clientCode")
     broker: str
     team_name: str = Field(..., alias="teamName")
-    quantity: int = Field(default=1)
     entry_price: Optional[float] = Field(None, alias="entryPrice")
     exit_price: Optional[float] = Field(None, alias="exitPrice")
     pnl: Optional[float] = Field(None)

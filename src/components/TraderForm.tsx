@@ -34,9 +34,12 @@ const formSchema = z.object({
   commodity: z.string().min(1, "Commodity is required"),
   expiry: z.string().min(1, "Expiry is required"),
   contractType: z.string().min(1, "Contract type is required"),
-  tradeType: z.string().min(1, "Trade type is required"),
   strikePrice: z.string().min(1, "Strike price is required"),
   optionType: z.string().min(1, "Option type is required"),
+  buyQty: z.string().optional(),
+  buyAvg: z.string().optional(),
+  sellQty: z.string().optional(),
+  sellAvg: z.string().optional(),
   clientCode: z.string().min(1, "Client code is required"),
   broker: z.string().min(1, "Broker is required"),
   teamName: z.string().min(1, "Team name is required"),
@@ -73,9 +76,12 @@ export function TraderForm() {
       commodity: "",
       expiry: "",
       contractType: "",
-      tradeType: "",
       strikePrice: "",
       optionType: "",
+      buyQty: "",
+      buyAvg: "",
+      sellQty: "",
+      sellAvg: "",
       clientCode: "",
       broker: "",
       teamName: "",
@@ -206,9 +212,12 @@ export function TraderForm() {
           commodity: values.commodity,
           expiry: values.expiry,
           contractType: values.contractType,
-          tradeType: values.tradeType,
           strikePrice: parseFloat(values.strikePrice),
           optionType: values.optionType,
+          buyQty: values.buyQty ? parseInt(values.buyQty) : null,
+          buyAvg: values.buyAvg ? parseFloat(values.buyAvg) : null,
+          sellQty: values.sellQty ? parseInt(values.sellQty) : null,
+          sellAvg: values.sellAvg ? parseFloat(values.sellAvg) : null,
           clientCode: values.clientCode,
           broker: values.broker,
           teamName: values.teamName,
@@ -228,9 +237,12 @@ export function TraderForm() {
           commodity: "",
           expiry: "",
           contractType: "",
-          tradeType: "",
           strikePrice: "",
           optionType: "",
+          buyQty: "",
+          buyAvg: "",
+          sellQty: "",
+          sellAvg: "",
           clientCode: "",
           broker: "",
           teamName: "",
@@ -270,9 +282,12 @@ export function TraderForm() {
           commodity: updatedEntry.commodity,
           expiry: updatedEntry.expiry,
           contractType: updatedEntry.contractType || updatedEntry.contract_type,
-          tradeType: updatedEntry.tradeType || updatedEntry.trade_type,
           strikePrice: parseFloat(updatedEntry.strikePrice || updatedEntry.strike_price),
           optionType: updatedEntry.optionType || updatedEntry.option_type,
+          buyQty: updatedEntry.buyQty || updatedEntry.buy_qty,
+          buyAvg: updatedEntry.buyAvg || updatedEntry.buy_avg,
+          sellQty: updatedEntry.sellQty || updatedEntry.sell_qty,
+          sellAvg: updatedEntry.sellAvg || updatedEntry.sell_avg,
           clientCode: updatedEntry.clientCode || updatedEntry.client_code,
           broker: updatedEntry.broker,
           teamName: updatedEntry.teamName || updatedEntry.team_name,
@@ -624,32 +639,6 @@ export function TraderForm() {
                 )}
               />
 
-              {/* Trade Type - Dropdown */}
-              <FormField
-                control={form.control}
-                name="tradeType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Trade Type</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select trade type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {masters["Trade Type"]?.map((item) => (
-                          <SelectItem key={item.id} value={item.name}>
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
               {/* Strike Price - Text Input */}
               <FormField
                 control={form.control}
@@ -691,27 +680,76 @@ export function TraderForm() {
                 )}
               />
 
-              {/* Client Code - Dropdown */}
+              {/* Buy Qty - Number Input */}
+              <FormField
+                control={form.control}
+                name="buyQty"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Buy Qty</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="Enter buy quantity" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Buy Avg - Number Input */}
+              <FormField
+                control={form.control}
+                name="buyAvg"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Buy Avg</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.01" placeholder="Enter buy average" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Sell Qty - Number Input */}
+              <FormField
+                control={form.control}
+                name="sellQty"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sell Qty</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="Enter sell quantity" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Sell Avg - Number Input */}
+              <FormField
+                control={form.control}
+                name="sellAvg"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sell Avg</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.01" placeholder="Enter sell average" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Client Code - Text Input */}
               <FormField
                 control={form.control}
                 name="clientCode"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Client Code</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select client code" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {masters["Client Code"]?.map((item) => (
-                          <SelectItem key={item.id} value={item.name}>
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <Input placeholder="Enter client code" {...field} />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -769,16 +807,27 @@ export function TraderForm() {
                 )}
               />
 
-              {/* Status - Text Input */}
+              {/* Status - Dropdown */}
               <FormField
                 control={form.control}
                 name="status"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Status</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter status" {...field} />
-                    </FormControl>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {masters["Status"]?.map((item) => (
+                          <SelectItem key={item.id} value={item.name}>
+                            {item.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

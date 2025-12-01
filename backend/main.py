@@ -265,6 +265,31 @@ def get_all_masters():
                     }
                     for v in values
                 ]
+
+            # Add fixed masters (Contract Type, Option Type, Team Name) - not editable in Masters tab
+            cursor = conn.cursor()
+
+            # Fetch Contract Type
+            cursor.execute("SELECT id, name, created_at FROM master_contract_type ORDER BY name ASC")
+            transformed["Contract Type"] = [
+                {"id": row["id"], "name": row["name"], "createdAt": row["created_at"]}
+                for row in cursor.fetchall()
+            ]
+
+            # Fetch Option Type
+            cursor.execute("SELECT id, name, created_at FROM master_option_type ORDER BY name ASC")
+            transformed["Option Type"] = [
+                {"id": row["id"], "name": row["name"], "createdAt": row["created_at"]}
+                for row in cursor.fetchall()
+            ]
+
+            # Fetch Team Name
+            cursor.execute("SELECT id, name, created_at FROM master_team_name ORDER BY name ASC")
+            transformed["Team Name"] = [
+                {"id": row["id"], "name": row["name"], "createdAt": row["created_at"]}
+                for row in cursor.fetchall()
+            ]
+
             return transformed
     except Exception as e:
         raise HTTPException(
@@ -313,10 +338,9 @@ def create_master_value(category: str, value: MasterValueCreate):
             # Fetch the created value
             cursor = conn.cursor()
             table_name = crud.MASTER_TABLE_MAP.get(category)
-            field_name = "code" if category == "Client Code" else "name"
 
             cursor.execute(f"""
-                SELECT id, {field_name} as name, created_at
+                SELECT id, name, created_at
                 FROM {table_name}
                 WHERE id = ?
             """, (value_id,))
@@ -377,6 +401,49 @@ def delete_master_value(category: str, value_id: int):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting master value: {str(e)}"
+        )
+
+
+# ============================================
+# MAPPING ENDPOINTS
+# ============================================
+
+@app.get("/api/mappings/strategy-code")
+def get_strategy_code_mappings():
+    """
+    Get all strategy-code mappings with names.
+
+    Returns list of mappings with strategy and code names.
+    """
+    try:
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT
+                    s.id as strategy_id,
+                    s.name as strategy_name,
+                    c.id as code_id,
+                    c.name as code_name
+                FROM strategy_code sc
+                JOIN strategy s ON sc.strategy_id = s.id
+                JOIN code c ON sc.code_id = c.id
+                ORDER BY s.name, c.name
+            """)
+
+            mappings = []
+            for row in cursor.fetchall():
+                mappings.append({
+                    "strategyId": row["strategy_id"],
+                    "strategy": row["strategy_name"],
+                    "codeId": row["code_id"],
+                    "code": row["code_name"]
+                })
+
+            return mappings
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching strategy-code mappings: {str(e)}"
         )
 
 

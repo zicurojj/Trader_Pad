@@ -18,9 +18,12 @@ export interface TraderEntry {
   commodity: string
   expiry: string
   contractType: string
-  tradeType: string
   strikePrice: string
   optionType: string
+  buyQty?: number
+  buyAvg?: number
+  sellQty?: number
+  sellAvg?: number
   clientCode: string
   broker: string
   teamName: string
@@ -38,13 +41,15 @@ export interface ManualTradeEntry {
   commodity: string
   expiry: string
   contractType: string
-  tradeType: string
   strikePrice: number
   optionType: string
+  buyQty?: number
+  buyAvg?: number
+  sellQty?: number
+  sellAvg?: number
   clientCode: string
   broker: string
   teamName: string
-  quantity: number
   entryPrice?: number
   exitPrice?: number
   pnl?: number
@@ -66,13 +71,15 @@ export interface ManualTradeEntryCreate {
   commodity: string
   expiry: string
   contractType: string
-  tradeType: string
   strikePrice: number
   optionType: string
+  buyQty?: number
+  buyAvg?: number
+  sellQty?: number
+  sellAvg?: number
   clientCode: string
   broker: string
   teamName: string
-  quantity: number
   entryPrice?: number
   exitPrice?: number
   pnl?: number

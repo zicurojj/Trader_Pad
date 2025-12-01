@@ -38,10 +38,12 @@ const DEFAULT_ENTRY: Partial<ManualTradeEntryCreate> = {
   commodity: '',
   expiry: new Date().toISOString().split('T')[0],
   contractType: '',
-  tradeType: '',
   strikePrice: 0,
   optionType: '',
-  quantity: 1,
+  buyQty: 0,
+  buyAvg: 0,
+  sellQty: 0,
+  sellAvg: 0,
   clientCode: '',
   broker: '',
   teamName: '',
@@ -58,10 +60,12 @@ const COLUMNS = [
   { key: 'commodity', label: 'Commodity', type: 'text', width: 110 },
   { key: 'expiry', label: 'Expiry', type: 'date', width: 120 },
   { key: 'contractType', label: 'Contract Type', type: 'text', width: 120 },
-  { key: 'tradeType', label: 'Trade Type', type: 'text', width: 100 },
   { key: 'strikePrice', label: 'Strike Price', type: 'number', width: 110 },
   { key: 'optionType', label: 'Option Type', type: 'text', width: 110 },
-  { key: 'quantity', label: 'Quantity', type: 'number', width: 80 },
+  { key: 'buyQty', label: 'Buy Qty', type: 'number', width: 90 },
+  { key: 'buyAvg', label: 'Buy Avg', type: 'number', width: 90 },
+  { key: 'sellQty', label: 'Sell Qty', type: 'number', width: 90 },
+  { key: 'sellAvg', label: 'Sell Avg', type: 'number', width: 90 },
   { key: 'clientCode', label: 'Client Code', type: 'text', width: 110 },
   { key: 'broker', label: 'Broker', type: 'text', width: 110 },
   { key: 'teamName', label: 'Team Name', type: 'text', width: 110 },
@@ -94,8 +98,8 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
   // Helper function to check if a field should be a dropdown
   const isDropdownField = (fieldKey: string) => {
     const dropdownFieldKeys = [
-      'strategy', 'code', 'exchange', 'commodity', 'contractType', 
-      'tradeType', 'optionType', 'clientCode', 'broker', 'teamName'
+      'strategy', 'code', 'exchange', 'commodity', 'contractType',
+      'optionType', 'broker', 'teamName', 'status'
     ]
     return dropdownFieldKeys.includes(fieldKey)
   }
@@ -244,11 +248,10 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
       exchange: masters.Exchange || [],
       commodity: masters.Commodity || [],
       contractType: masters['Contract Type'] || [],
-      tradeType: masters['Trade Type'] || [],
       optionType: masters['Option Type'] || [],
-      clientCode: masters['Client Code'] || [],
       broker: masters.Broker || [],
       teamName: masters['Team Name'] || [],
+      status: masters.Status || [],
     }
 
     // Read-only mode - show text only
@@ -337,6 +340,7 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
             <button
               type="button"
               onClick={(e) => {
+                e.preventDefault()
                 e.stopPropagation()
 
                 if (column.key === 'strategy') {
@@ -411,10 +415,12 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
         commodity: entry.commodity,
         expiry: entry.expiry,
         contract_type: entry.contractType,
-        trade_type: entry.tradeType,
         strike_price: entry.strikePrice,
         option_type: entry.optionType,
-        quantity: entry.quantity,
+        buy_qty: entry.buyQty,
+        buy_avg: entry.buyAvg,
+        sell_qty: entry.sellQty,
+        sell_avg: entry.sellAvg,
         client_code: entry.clientCode,
         remark: entry.remark,
         tag: entry.tag,
@@ -462,10 +468,12 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
           commodity: entry.commodity,
           expiry: entry.expiry,
           contract_type: entry.contractType,
-          trade_type: entry.tradeType,
           strike_price: entry.strikePrice,
           option_type: entry.optionType,
-          quantity: entry.quantity,
+          buy_qty: entry.buyQty,
+          buy_avg: entry.buyAvg,
+          sell_qty: entry.sellQty,
+          sell_avg: entry.sellAvg,
           entry_price: entry.entryPrice,
           exit_price: entry.exitPrice,
           pnl: entry.pnl,
@@ -526,10 +534,12 @@ export function ManualTradeExcelGrid({}: ExcelGridProps) {
           commodity: entry.commodity,
           expiry: entry.expiry,
           contractType: entry.contractType,
-          tradeType: entry.tradeType,
           strikePrice: entry.strikePrice,
           optionType: entry.optionType,
-          quantity: entry.quantity,
+          buyQty: entry.buyQty,
+          buyAvg: entry.buyAvg,
+          sellQty: entry.sellQty,
+          sellAvg: entry.sellAvg,
           clientCode: entry.clientCode,
           broker: entry.broker,
           teamName: entry.teamName,

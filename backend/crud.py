@@ -11,9 +11,10 @@ def create_trade_entry(conn, entry: TradeEntryCreate, username: str) -> int:
     cursor.execute("""
         INSERT INTO trader_entries (
             username, trade_date, strategy, code, exchange, commodity, expiry,
-            contract_type, trade_type, strike_price, option_type,
+            contract_type, strike_price, option_type,
+            buy_qty, buy_avg, sell_qty, sell_avg,
             client_code, broker, team_name, status, remark, tag
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         username,
         entry.trade_date,
@@ -23,9 +24,12 @@ def create_trade_entry(conn, entry: TradeEntryCreate, username: str) -> int:
         entry.commodity,
         entry.expiry,
         entry.contract_type,
-        entry.trade_type,
         entry.strike_price,
         entry.option_type,
+        entry.buy_qty,
+        entry.buy_avg,
+        entry.sell_qty,
+        entry.sell_avg,
         entry.client_code,
         entry.broker,
         entry.team_name,
@@ -99,9 +103,12 @@ def update_trade_entry(conn, entry_id: int, entry: TradeEntryUpdate, username: s
             commodity = ?,
             expiry = ?,
             contract_type = ?,
-            trade_type = ?,
             strike_price = ?,
             option_type = ?,
+            buy_qty = ?,
+            buy_avg = ?,
+            sell_qty = ?,
+            sell_avg = ?,
             client_code = ?,
             broker = ?,
             team_name = ?,
@@ -118,9 +125,12 @@ def update_trade_entry(conn, entry_id: int, entry: TradeEntryUpdate, username: s
         entry.commodity,
         entry.expiry,
         entry.contract_type,
-        entry.trade_type,
         entry.strike_price,
         entry.option_type,
+        entry.buy_qty,
+        entry.buy_avg,
+        entry.sell_qty,
+        entry.sell_avg,
         entry.client_code,
         entry.broker,
         entry.team_name,
@@ -168,14 +178,10 @@ def get_all_trade_entries(conn) -> List[dict]:
 MASTER_TABLE_MAP = {
     "Strategy": "strategy",
     "Exchange": "exchange",
-    "Contract Type": "master_contract_type",
-    "Trade Type": "master_trade_type",
-    "Option Type": "master_option_type",
     "Code": "code",
     "Commodity": "commodity",
-    "Client Code": "master_client_code",
     "Broker": "master_broker",
-    "Team Name": "master_team_name",
+    "Status": "master_status",
 }
 
 def get_master_values(conn, category: str) -> List[dict]:
@@ -188,11 +194,8 @@ def get_master_values(conn, category: str) -> List[dict]:
         raise ValueError(f"Invalid master category: {category}")
 
     cursor = conn.cursor()
-    # Client Code uses 'code' field, others use 'name'
-    field_name = "code" if category == "Client Code" else "name"
-
     cursor.execute(f"""
-        SELECT id, {field_name} as name, created_at
+        SELECT id, name, created_at
         FROM {table_name}
         ORDER BY name ASC
     """)
@@ -222,11 +225,8 @@ def create_master_value(conn, category: str, name: str) -> int:
         raise ValueError(f"Invalid master category: {category}")
 
     cursor = conn.cursor()
-    # Client Code uses 'code' field, others use 'name'
-    field_name = "code" if category == "Client Code" else "name"
-
     cursor.execute(f"""
-        INSERT INTO {table_name} ({field_name})
+        INSERT INTO {table_name} (name)
         VALUES (?)
     """, (name,))
 
@@ -322,10 +322,11 @@ def create_manual_trade_entry(conn, entry: ManualTradeEntryCreate, username: str
     cursor.execute("""
         INSERT INTO manual_trade_entries (
             username, trade_date, strategy, code, exchange, commodity, expiry,
-            contract_type, trade_type, strike_price, option_type,
-            client_code, broker, team_name, quantity, entry_price,
+            contract_type, strike_price, option_type,
+            buy_qty, buy_avg, sell_qty, sell_avg,
+            client_code, broker, team_name, entry_price,
             exit_price, pnl, status, remark, tag, entry_time, exit_time
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         username,
         entry.trade_date,
@@ -335,13 +336,15 @@ def create_manual_trade_entry(conn, entry: ManualTradeEntryCreate, username: str
         entry.commodity,
         entry.expiry,
         entry.contract_type,
-        entry.trade_type,
         entry.strike_price,
         entry.option_type,
+        entry.buy_qty,
+        entry.buy_avg,
+        entry.sell_qty,
+        entry.sell_avg,
         entry.client_code,
         entry.broker,
         entry.team_name,
-        entry.quantity,
         entry.entry_price,
         entry.exit_price,
         entry.pnl,
@@ -401,13 +404,15 @@ def update_manual_trade_entry(conn, entry_id: int, entry: ManualTradeEntryUpdate
             commodity = ?,
             expiry = ?,
             contract_type = ?,
-            trade_type = ?,
             strike_price = ?,
             option_type = ?,
+            buy_qty = ?,
+            buy_avg = ?,
+            sell_qty = ?,
+            sell_avg = ?,
             client_code = ?,
             broker = ?,
             team_name = ?,
-            quantity = ?,
             entry_price = ?,
             exit_price = ?,
             pnl = ?,
@@ -426,13 +431,15 @@ def update_manual_trade_entry(conn, entry_id: int, entry: ManualTradeEntryUpdate
         entry.commodity,
         entry.expiry,
         entry.contract_type,
-        entry.trade_type,
         entry.strike_price,
         entry.option_type,
+        entry.buy_qty,
+        entry.buy_avg,
+        entry.sell_qty,
+        entry.sell_avg,
         entry.client_code,
         entry.broker,
         entry.team_name,
-        entry.quantity,
         entry.entry_price,
         entry.exit_price,
         entry.pnl,
@@ -486,10 +493,11 @@ def bulk_create_manual_trade_entries(conn, entries: List[ManualTradeEntryCreate]
         cursor.execute("""
             INSERT INTO manual_trade_entries (
                 username, trade_date, strategy, code, exchange, commodity, expiry,
-                contract_type, trade_type, strike_price, option_type,
-                client_code, broker, team_name, quantity, entry_price,
+                contract_type, strike_price, option_type,
+                buy_qty, buy_avg, sell_qty, sell_avg,
+                client_code, broker, team_name, entry_price,
                 exit_price, pnl, status, remark, tag, entry_time, exit_time
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             username,
             entry.trade_date,
@@ -499,13 +507,15 @@ def bulk_create_manual_trade_entries(conn, entries: List[ManualTradeEntryCreate]
             entry.commodity,
             entry.expiry,
             entry.contract_type,
-            entry.trade_type,
             entry.strike_price,
             entry.option_type,
+            entry.buy_qty,
+            entry.buy_avg,
+            entry.sell_qty,
+            entry.sell_avg,
             entry.client_code,
             entry.broker,
             entry.team_name,
-            entry.quantity,
             entry.entry_price,
             entry.exit_price,
             entry.pnl,

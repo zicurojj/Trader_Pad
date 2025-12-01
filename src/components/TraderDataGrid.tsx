@@ -624,21 +624,11 @@ export function TraderDataGrid({ date, entries, masters, onUpdateEntry, onDelete
                       {/* Client Code */}
                       <TableCell className="border-r border-slate-200 px-3 py-2 text-sm">
                         {isEditing ? (
-                          <Select
+                          <Input
                             value={displayEntry.clientCode}
-                            onValueChange={(value) => updateField('clientCode', value)}
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {masters["Client Code"]?.map((item) => (
-                                <SelectItem key={item.id} value={item.name}>
-                                  {item.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            onChange={(e) => updateField('clientCode', e.target.value)}
+                            className="h-8 text-xs"
+                          />
                         ) : (
                           displayEntry.clientCode
                         )}

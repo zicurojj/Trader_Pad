@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,12 +11,31 @@ import {
 } from "@/components/ui/select"
 import type { MasterValue, MasterData } from "@/types"
 import { API_BASE_URL } from "@/constants"
+import { AgGridReact } from 'ag-grid-react'
+import type { ColDef } from 'ag-grid-community'
+import 'ag-grid-community/styles/ag-grid.css'
+import 'ag-grid-community/styles/ag-theme-alpine.css'
+
+interface StrategyCodeMapping {
+  strategyId: number
+  strategy: string
+  codeId: number
+  code: string
+}
 
 export function Masters() {
   const [masters, setMasters] = useState<MasterData>({})
   const [selectedMaster, setSelectedMaster] = useState<string>("")
   const [newValue, setNewValue] = useState<string>("")
   const [loading, setLoading] = useState(false)
+  const [selectedMappingView, setSelectedMappingView] = useState<string>("")
+  const [strategyCodeMappings, setStrategyCodeMappings] = useState<StrategyCodeMapping[]>([])
+
+  // Define column definitions for AG Grid
+  const strategyCodeColDefs = useMemo<ColDef<StrategyCodeMapping>[]>(() => [
+    { field: 'strategy', headerName: 'Strategy', sortable: true, filter: true, flex: 1 },
+    { field: 'code', headerName: 'Code', sortable: true, filter: true, flex: 1 }
+  ], [])
 
   // Fetch all master data on component mount
   useEffect(() => {
@@ -35,6 +54,25 @@ export function Masters() {
       }
     } catch (error) {
       console.error("Error fetching masters:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchStrategyCodeMappings = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch(`${API_BASE_URL}/mappings/strategy-code`)
+      if (response.ok) {
+        const data = await response.json()
+        console.log("Strategy-Code Mappings:", data)
+        setStrategyCodeMappings(data)
+        setSelectedMappingView("Strategy")
+      } else {
+        console.error("Failed to fetch strategy-code mappings", response.status)
+      }
+    } catch (error) {
+      console.error("Error fetching strategy-code mappings:", error)
     } finally {
       setLoading(false)
     }
@@ -131,17 +169,79 @@ export function Masters() {
                 <SelectValue placeholder="Choose a master to manage" />
               </SelectTrigger>
               <SelectContent>
-                {Object.keys(masters).sort().map((masterName) => (
-                  <SelectItem key={masterName} value={masterName}>
-                    {masterName}
-                  </SelectItem>
-                ))}
+                {/* Mapping option - special handling */}
+                <SelectItem value="Mapping">Mapping</SelectItem>
+
+                {/* Regular masters */}
+                {Object.keys(masters)
+                  .filter((masterName) =>
+                    masterName !== "Contract Type" &&
+                    masterName !== "Option Type" &&
+                    masterName !== "Team Name"
+                  )
+                  .sort()
+                  .map((masterName) => (
+                    <SelectItem key={masterName} value={masterName}>
+                      {masterName}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Display selected master's values */}
-          {selectedMaster && masters[selectedMaster] && (
+          {/* Display Mapping buttons or selected master's values */}
+          {selectedMaster === "Mapping" ? (
+            <Card className="max-w-2xl">
+              <CardHeader>
+                <CardTitle>Mapping Management</CardTitle>
+                <CardDescription>
+                  Manage relationships between masters
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-4">
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-20 text-lg font-medium"
+                    onClick={fetchStrategyCodeMappings}
+                  >
+                    Strategy
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-20 text-lg font-medium"
+                  >
+                    Code
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-20 text-lg font-medium"
+                  >
+                    Exchange
+                  </Button>
+                </div>
+
+                {/* Display AG Grid for selected mapping view */}
+                {selectedMappingView === "Strategy" && (
+                  <div className="mt-6">
+                    <h3 className="text-lg font-semibold mb-3">
+                      Strategy - Code Mappings ({strategyCodeMappings.length} records)
+                    </h3>
+                    <div className="ag-theme-alpine" style={{ height: 500, width: '100%' }}>
+                      <AgGridReact<StrategyCodeMapping>
+                        rowData={strategyCodeMappings}
+                        columnDefs={strategyCodeColDefs}
+                        defaultColDef={{
+                          resizable: true,
+                        }}
+                        domLayout='normal'
+                      />
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ) : selectedMaster && masters[selectedMaster] ? (
             <Card className="max-w-2xl">
               <CardHeader>
                 <CardTitle>{selectedMaster}</CardTitle>
@@ -201,7 +301,7 @@ export function Masters() {
                 </div>
               </CardContent>
             </Card>
-          )}
+          ) : null}
         </>
       )}
     </div>
