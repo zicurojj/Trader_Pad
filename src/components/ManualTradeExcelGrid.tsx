@@ -1,0 +1,721 @@
+import { useState, useEffect, useRef } from 'react'
+import type { KeyboardEvent } from 'react'
+import { Plus, Save, Trash2, Download, X } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import type { ManualTradeEntryCreate, MasterData } from '@/types'
+import { API_BASE_URL } from '@/constants'
+
+interface ExcelGridProps {}
+
+type CellPosition = {
+  row: number
+  col: number
+}
+
+const DEFAULT_ENTRY: Partial<ManualTradeEntryCreate> = {
+  id: undefined,
+  tradeDate: new Date().toISOString().split('T')[0],
+  strategy: '',
+  code: '',
+  exchange: '',
+  commodity: '',
+  expiry: new Date().toISOString().split('T')[0],
+  contractType: '',
+  strikePrice: 0,
+  optionType: '',
+  buyQty: 0,
+  buyAvg: 0,
+  sellQty: 0,
+  sellAvg: 0,
+  clientCode: '',
+  broker: '',
+  teamName: '',
+  status: '',
+  remark: '',
+  tag: '',
+}
+
+const COLUMNS = [
+  { key: 'tradeDate', label: 'Trade Date', type: 'date', width: 120 },
+  { key: 'strategy', label: 'Strategy', type: 'text', width: 120 },
+  { key: 'code', label: 'Code', type: 'text', width: 100 },
+  { key: 'exchange', label: 'Exchange', type: 'text', width: 100 },
+  { key: 'commodity', label: 'Commodity', type: 'text', width: 110 },
+  { key: 'expiry', label: 'Expiry', type: 'date', width: 120 },
+  { key: 'contractType', label: 'Contract Type', type: 'text', width: 120 },
+  { key: 'strikePrice', label: 'Strike Price', type: 'number', width: 110 },
+  { key: 'optionType', label: 'Option Type', type: 'text', width: 110 },
+  { key: 'buyQty', label: 'Buy Qty', type: 'number', width: 90 },
+  { key: 'buyAvg', label: 'Buy Avg', type: 'number', width: 90 },
+  { key: 'sellQty', label: 'Sell Qty', type: 'number', width: 90 },
+  { key: 'sellAvg', label: 'Sell Avg', type: 'number', width: 90 },
+  { key: 'clientCode', label: 'Client Code', type: 'text', width: 110 },
+  { key: 'broker', label: 'Broker', type: 'text', width: 110 },
+  { key: 'teamName', label: 'Team Name', type: 'text', width: 110 },
+  { key: 'status', label: 'Status', type: 'text', width: 100 },
+  { key: 'remark', label: 'Remark', type: 'text', width: 150 },
+  { key: 'tag', label: 'Tag', type: 'text', width: 100 },
+] as const
+
+export function ManualTradeExcelGrid({}: ExcelGridProps) {
+  const { token } = useAuth()
+  const todayDate = new Date().toISOString().split('T')[0]
+  const [selectedDate, setSelectedDate] = useState<string>(todayDate)
+  const [entries, setEntries] = useState<Partial<ManualTradeEntryCreate>[]>([{ ...DEFAULT_ENTRY, tradeDate: todayDate }])
+  const [isLoading, setIsLoading] = useState(false)
+  const [copiedCell, setCopiedCell] = useState<{ row: number; col: string; value: any } | null>(null)
+  const [masters, setMasters] = useState<MasterData>({})
+  const [isReadOnlyMode, setIsReadOnlyMode] = useState(false)
+
+  // Cascading dropdown state for each row
+  const [filteredCodes, setFilteredCodes] = useState<{ [rowIndex: number]: any[] }>({})
+  const [filteredExchanges, setFilteredExchanges] = useState<{ [rowIndex: number]: any[] }>({})
+  const [filteredCommodities, setFilteredCommodities] = useState<{ [rowIndex: number]: any[] }>({})
+  const [selectedStrategyIds, setSelectedStrategyIds] = useState<{ [rowIndex: number]: number | null }>({})
+  const [selectedCodeIds, setSelectedCodeIds] = useState<{ [rowIndex: number]: number | null }>({})
+  const [selectedExchangeIds, setSelectedExchangeIds] = useState<{ [rowIndex: number]: number | null }>({})
+
+  const gridRef = useRef<HTMLDivElement>(null)
+  const inputRefs = useRef<{ [key: string]: HTMLInputElement | HTMLSelectElement }>({})
+
+  // Helper function to check if a field should be a dropdown
+  const isDropdownField = (fieldKey: string) => {
+    const dropdownFieldKeys = [
+      'strategy', 'code', 'exchange', 'commodity', 'contractType',
+      'optionType', 'broker', 'teamName', 'status'
+    ]
+    return dropdownFieldKeys.includes(fieldKey)
+  }
+
+  // Fetch master data from API
+  const fetchMasters = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/masters`)
+      if (response.ok) {
+        const data = await response.json()
+        setMasters(data)
+      } else {
+        console.error('Failed to fetch masters, status:', response.status)
+      }
+    } catch (error) {
+      console.error('Error fetching masters:', error)
+    }
+  }
+
+  // Cascading dropdown API functions
+  const fetchCodesByStrategy = async (strategyId: number, rowIndex: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/cascading/codes/${strategyId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setFilteredCodes(prev => ({ ...prev, [rowIndex]: data }))
+      }
+    } catch (error) {
+      console.error('Error fetching codes:', error)
+    }
+  }
+
+  const fetchExchangesByCode = async (codeId: number, rowIndex: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/cascading/exchanges/${codeId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setFilteredExchanges(prev => ({ ...prev, [rowIndex]: data }))
+      }
+    } catch (error) {
+      console.error('Error fetching exchanges:', error)
+    }
+  }
+
+  const fetchCommoditiesByExchange = async (exchangeId: number, rowIndex: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/cascading/commodities/${exchangeId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setFilteredCommodities(prev => ({ ...prev, [rowIndex]: data }))
+      }
+    } catch (error) {
+      console.error('Error fetching commodities:', error)
+    }
+  }
+
+  // No P&L calculation needed for basic trade entry form
+
+  const addNewRow = () => {
+    const newEntry = { ...DEFAULT_ENTRY, tradeDate: selectedDate }
+    setEntries([...entries, newEntry])
+    setIsReadOnlyMode(false)
+  }
+
+  const deleteRow = async (index: number) => {
+    const entry = entries[index]
+    
+    // If entry has an ID, delete from database immediately
+    if (entry.id) {
+      try {
+        setIsLoading(true)
+        const response = await fetch(`${API_BASE_URL}/manual-trade-entries/${entry.id}`, {
+          method: 'DELETE',
+        })
+        
+        if (!response.ok) {
+          throw new Error('Failed to delete entry')
+        }
+        
+        // Reload entries from database to reflect the deletion
+        await loadEntriesByDate(selectedDate)
+      } catch (error) {
+        console.error('Error deleting entry:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    } else {
+      // For new entries without ID, just remove from local state
+      if (entries.length > 1) {
+        const newEntries = entries.filter((_, i) => i !== index)
+        setEntries(newEntries)
+      }
+    }
+  }
+
+  const updateEntry = (index: number, field: string, value: any) => {
+    const newEntries = [...entries]
+    const entry = { ...newEntries[index] }
+    
+    if (field === 'strikePrice') {
+      (entry as any)[field] = value ? parseFloat(value) : 0
+    } else {
+      (entry as any)[field] = value
+    }
+
+    newEntries[index] = entry
+    setEntries(newEntries)
+  }
+
+  const handleKeyDown = (e: KeyboardEvent, rowIndex: number, colIndex: number) => {
+    const column = COLUMNS[colIndex]
+
+    switch (e.key) {
+      case 'Delete':
+        e.preventDefault()
+        if (!isReadOnlyMode) {
+          updateEntry(rowIndex, column.key, '')
+        }
+        break
+      case 'c':
+        if (e.ctrlKey) {
+          e.preventDefault()
+          const value = (entries[rowIndex] as any)[column.key]
+          setCopiedCell({ row: rowIndex, col: column.key, value })
+        }
+        break
+      case 'v':
+        if (e.ctrlKey && copiedCell && !isReadOnlyMode) {
+          e.preventDefault()
+          updateEntry(rowIndex, column.key, copiedCell.value)
+        }
+        break
+    }
+  }
+
+  const renderCell = (entry: Partial<ManualTradeEntryCreate>, rowIndex: number, colIndex: number) => {
+    const column = COLUMNS[colIndex]
+    const value = (entry as any)[column.key]
+    const cellKey = `${rowIndex}-${colIndex}`
+    const tabIndex = rowIndex * COLUMNS.length + colIndex + 1
+
+    // Check if this field should be a dropdown
+    const dropdownFields = {
+      strategy: masters.Strategy || [],
+      code: masters.Code || [],
+      exchange: masters.Exchange || [],
+      commodity: masters.Commodity || [],
+      contractType: masters['Contract Type'] || [],
+      optionType: masters['Option Type'] || [],
+      broker: masters.Broker || [],
+      teamName: masters['Team Name'] || [],
+      status: masters.Status || [],
+    }
+
+    // Read-only mode - show text only
+    if (isReadOnlyMode) {
+      return (
+        <div className="w-full h-10 flex items-center px-3 bg-gray-50">
+          <div className="text-sm truncate">
+            {column.type === 'number' && value !== undefined && value !== null && value !== '' ?
+              parseFloat(value).toFixed(2) :
+              (value || '')
+            }
+          </div>
+        </div>
+      )
+    }
+
+    // Dropdown fields - handle cascading logic
+    if (dropdownFields[column.key as keyof typeof dropdownFields]) {
+      let options = dropdownFields[column.key as keyof typeof dropdownFields]
+
+      // Apply cascading filters
+      if (column.key === 'code') {
+        options = filteredCodes[rowIndex] || []
+      } else if (column.key === 'exchange') {
+        options = filteredExchanges[rowIndex] || []
+      } else if (column.key === 'commodity') {
+        options = filteredCommodities[rowIndex] || []
+      }
+
+      return (
+        <div className="w-full h-10 relative">
+          <Select
+            value={value || ''}
+            onValueChange={(newValue) => {
+              const selectedItem = options.find((item: any) => item.name === newValue)
+
+              if (column.key === 'strategy' && selectedItem) {
+                setSelectedStrategyIds(prev => ({ ...prev, [rowIndex]: selectedItem.id }))
+                fetchCodesByStrategy(selectedItem.id, rowIndex)
+                updateEntry(rowIndex, 'code', '')
+                updateEntry(rowIndex, 'exchange', '')
+                updateEntry(rowIndex, 'commodity', '')
+                setFilteredCodes(prev => ({ ...prev, [rowIndex]: [] }))
+                setFilteredExchanges(prev => ({ ...prev, [rowIndex]: [] }))
+                setFilteredCommodities(prev => ({ ...prev, [rowIndex]: [] }))
+                setSelectedCodeIds(prev => ({ ...prev, [rowIndex]: null }))
+                setSelectedExchangeIds(prev => ({ ...prev, [rowIndex]: null }))
+              } else if (column.key === 'code' && selectedItem) {
+                setSelectedCodeIds(prev => ({ ...prev, [rowIndex]: selectedItem.id }))
+                fetchExchangesByCode(selectedItem.id, rowIndex)
+                updateEntry(rowIndex, 'exchange', '')
+                updateEntry(rowIndex, 'commodity', '')
+                setFilteredExchanges(prev => ({ ...prev, [rowIndex]: [] }))
+                setFilteredCommodities(prev => ({ ...prev, [rowIndex]: [] }))
+                setSelectedExchangeIds(prev => ({ ...prev, [rowIndex]: null }))
+              } else if (column.key === 'exchange' && selectedItem) {
+                setSelectedExchangeIds(prev => ({ ...prev, [rowIndex]: selectedItem.id }))
+                fetchCommoditiesByExchange(selectedItem.id, rowIndex)
+                updateEntry(rowIndex, 'commodity', '')
+                setFilteredCommodities(prev => ({ ...prev, [rowIndex]: [] }))
+              }
+
+              updateEntry(rowIndex, column.key, newValue)
+            }}
+          >
+            <SelectTrigger className="w-full h-full border-0 text-sm">
+              <SelectValue placeholder={`Select ${column.label.toLowerCase()}`} />
+            </SelectTrigger>
+            <SelectContent>
+              {options && options.length > 0 ? (
+                options.map((item) => (
+                  <SelectItem key={item.id} value={item.name}>
+                    {item.name}
+                  </SelectItem>
+                ))
+              ) : (
+                <SelectItem value="no-options" disabled>
+                  No options available
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+
+          {/* Clear button for cascading dropdowns */}
+          {value && ['strategy', 'code', 'exchange', 'commodity'].includes(column.key) && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+
+                if (column.key === 'strategy') {
+                  updateEntry(rowIndex, 'strategy', '')
+                  updateEntry(rowIndex, 'code', '')
+                  updateEntry(rowIndex, 'exchange', '')
+                  updateEntry(rowIndex, 'commodity', '')
+                  setSelectedStrategyIds(prev => ({ ...prev, [rowIndex]: null }))
+                  setSelectedCodeIds(prev => ({ ...prev, [rowIndex]: null }))
+                  setSelectedExchangeIds(prev => ({ ...prev, [rowIndex]: null }))
+                  setFilteredCodes(prev => ({ ...prev, [rowIndex]: [] }))
+                  setFilteredExchanges(prev => ({ ...prev, [rowIndex]: [] }))
+                  setFilteredCommodities(prev => ({ ...prev, [rowIndex]: [] }))
+                } else if (column.key === 'code') {
+                  updateEntry(rowIndex, 'code', '')
+                  updateEntry(rowIndex, 'exchange', '')
+                  updateEntry(rowIndex, 'commodity', '')
+                  setSelectedCodeIds(prev => ({ ...prev, [rowIndex]: null }))
+                  setSelectedExchangeIds(prev => ({ ...prev, [rowIndex]: null }))
+                  setFilteredExchanges(prev => ({ ...prev, [rowIndex]: [] }))
+                  setFilteredCommodities(prev => ({ ...prev, [rowIndex]: [] }))
+                } else if (column.key === 'exchange') {
+                  updateEntry(rowIndex, 'exchange', '')
+                  updateEntry(rowIndex, 'commodity', '')
+                  setSelectedExchangeIds(prev => ({ ...prev, [rowIndex]: null }))
+                  setFilteredCommodities(prev => ({ ...prev, [rowIndex]: [] }))
+                } else if (column.key === 'commodity') {
+                  updateEntry(rowIndex, 'commodity', '')
+                }
+              }}
+              className="absolute right-8 top-1/2 -translate-y-1/2 z-10 hover:bg-gray-200 rounded-full p-0.5"
+            >
+              <X className="h-3.5 w-3.5 text-gray-500" />
+            </button>
+          )}
+        </div>
+      )
+    }
+
+    // Regular input fields - always show input
+    return (
+      <div className="w-full h-10">
+        <input
+          ref={(el) => { if (el) inputRefs.current[cellKey] = el }}
+          type={column.type}
+          value={value || ''}
+          onChange={(e) => updateEntry(rowIndex, column.key, e.target.value)}
+          className="w-full h-full px-3 text-sm border-0 outline-none"
+          placeholder={column.type === 'number' ? '0' : column.type === 'date' ? 'yyyy-mm-dd' : ''}
+        />
+      </div>
+    )
+  }
+
+  const saveIndividualEntry = async (rowIndex: number) => {
+    setIsLoading(true)
+    try {
+      const entry = entries[rowIndex]
+      
+      // Validate required fields
+      if (!entry.strategy || !entry.code || !entry.exchange) {
+        console.warn('Strategy, Code, and Exchange are required fields')
+        return
+      }
+
+      // Convert camelCase to snake_case for backend
+      const backendEntry = {
+        trade_date: entry.tradeDate,
+        strategy: entry.strategy,
+        code: entry.code,
+        exchange: entry.exchange,
+        commodity: entry.commodity,
+        expiry: entry.expiry,
+        contract_type: entry.contractType,
+        strike_price: entry.strikePrice,
+        option_type: entry.optionType,
+        buy_qty: entry.buyQty,
+        buy_avg: entry.buyAvg,
+        sell_qty: entry.sellQty,
+        sell_avg: entry.sellAvg,
+        client_code: entry.clientCode,
+        remark: entry.remark,
+        tag: entry.tag,
+      }
+
+      const response = await fetch(`${API_BASE_URL}/manual-trade-entries`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(backendEntry),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to save entry')
+      }
+
+      await response.json()
+      
+      // Reload entries to get the latest data
+      loadEntriesByDate(selectedDate)
+    } catch (error) {
+      console.error('Error saving entry:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const saveAllEntries = async () => {
+    setIsLoading(true)
+    try {
+      // Save valid entries
+      const validEntries = entries.filter(entry => 
+        entry.strategy && entry.code && entry.exchange
+      )
+
+      if (validEntries.length > 0) {
+        // Convert camelCase to snake_case for backend
+        const backendEntries = validEntries.map(entry => ({
+          trade_date: entry.tradeDate,
+          strategy: entry.strategy,
+          code: entry.code,
+          exchange: entry.exchange,
+          commodity: entry.commodity,
+          expiry: entry.expiry,
+          contract_type: entry.contractType,
+          strike_price: entry.strikePrice,
+          option_type: entry.optionType,
+          buy_qty: entry.buyQty,
+          buy_avg: entry.buyAvg,
+          sell_qty: entry.sellQty,
+          sell_avg: entry.sellAvg,
+          entry_price: entry.entryPrice,
+          exit_price: entry.exitPrice,
+          pnl: entry.pnl,
+          client_code: entry.clientCode,
+          broker: entry.broker,
+          team_name: entry.teamName,
+          status: entry.status,
+          remark: entry.remark,
+          tag: entry.tag,
+        }))
+
+        const response = await fetch(`${API_BASE_URL}/manual-trade-entries/bulk`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(backendEntries),
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to save entries')
+        }
+
+        await response.json()
+      }
+      
+      // Reset the grid with a fresh entry
+      setEntries([{ ...DEFAULT_ENTRY, tradeDate: selectedDate }])
+      setSelectedCell({ row: 0, col: 0 })
+    } catch (error) {
+      console.error('Error saving entries:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const loadEntriesByDate = async (date?: string) => {
+    setIsLoading(true)
+    try {
+      const targetDate = date || selectedDate
+      const response = await fetch(`${API_BASE_URL}/manual-trade-entries/date/${targetDate}`)
+      
+      if (!response.ok) {
+        throw new Error('Failed to load entries')
+      }
+
+      const data = await response.json()
+      
+      if (data.length > 0) {
+        // Backend already returns camelCase format, just use the data directly
+        const convertedEntries = data.map((entry: any) => ({
+          id: entry.id,
+          tradeDate: entry.tradeDate,
+          strategy: entry.strategy,
+          code: entry.code,
+          exchange: entry.exchange,
+          commodity: entry.commodity,
+          expiry: entry.expiry,
+          contractType: entry.contractType,
+          strikePrice: entry.strikePrice,
+          optionType: entry.optionType,
+          buyQty: entry.buyQty,
+          buyAvg: entry.buyAvg,
+          sellQty: entry.sellQty,
+          sellAvg: entry.sellAvg,
+          clientCode: entry.clientCode,
+          broker: entry.broker,
+          teamName: entry.teamName,
+          status: entry.status,
+          remark: entry.remark,
+          tag: entry.tag,
+        }))
+        
+        setEntries(convertedEntries)
+        setIsReadOnlyMode(true)
+      } else {
+        setEntries([{ ...DEFAULT_ENTRY, tradeDate: selectedDate }])
+        setIsReadOnlyMode(false)
+      }
+    } catch (error) {
+      console.error('Error loading entries:', error)
+      setEntries([{ ...DEFAULT_ENTRY, tradeDate: selectedDate }])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const loadSelectedDateEntries = () => {
+    loadEntriesByDate(selectedDate)
+  }
+
+  const handleDateChange = (date: string) => {
+    setSelectedDate(date)
+    // No auto-loading - entries load only when Load button is clicked
+  }
+
+
+
+  // Fetch masters on component mount and load initial data
+  useEffect(() => {
+    fetchMasters()
+    // Start with today's entries, or empty grid if none
+    loadEntriesByDate(selectedDate)
+  }, [])
+
+
+  return (
+    <div className="space-y-6">
+      {/* Header Actions */}
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-4">
+          <h2 className="text-2xl font-bold">Manual Trade Entry - Excel Spreadsheet</h2>
+          {isReadOnlyMode && (
+            <div className="text-sm text-amber-600 bg-amber-50 px-3 py-1 rounded border border-amber-200">
+              📖 Viewing Mode - Records are read-only
+            </div>
+          )}
+        </div>
+        <div className="flex gap-2 items-center">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium">Date:</label>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => handleDateChange(e.target.value)}
+              className="px-3 py-1 border border-gray-300 rounded text-sm"
+            />
+          </div>
+          <Button onClick={addNewRow} size="sm" className="flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            {isReadOnlyMode ? 'New Entry' : 'Add Row'}
+          </Button>
+          <Button 
+            onClick={saveAllEntries} 
+            size="sm" 
+            className="flex items-center gap-2"
+            disabled={isLoading || isReadOnlyMode}
+          >
+            <Save className="h-4 w-4" />
+            Save All
+          </Button>
+          <Button 
+            onClick={loadSelectedDateEntries} 
+            size="sm" 
+            variant="outline"
+            className="flex items-center gap-2"
+            disabled={isLoading}
+          >
+            <Download className="h-4 w-4" />
+            Load Trades
+          </Button>
+        </div>
+      </div>
+
+      {/* Instructions */}
+      <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
+        <strong>Keyboard shortcuts:</strong> Tab/Shift+Tab to navigate • Click dropdown to select •
+        Ctrl+C to copy • Ctrl+V to paste • Delete to clear field
+      </div>
+
+      {/* Spreadsheet Grid */}
+      <Card>
+        <CardContent className="p-0">
+          <div 
+            ref={gridRef}
+            className="overflow-x-auto overflow-y-auto"
+            style={{ maxHeight: '750px', minWidth: '100%' }}
+          >
+            <Table className="w-auto min-w-max">
+              <TableHeader className="sticky top-0 z-10 bg-gray-100">
+                <TableRow>
+                  <TableHead className="w-16 text-center font-semibold bg-gray-200">
+                    #
+                  </TableHead>
+                  {COLUMNS.map((column) => (
+                    <TableHead 
+                      key={column.key}
+                      style={{ width: column.width, minWidth: column.width, maxWidth: column.width }}
+                      className="text-center font-semibold bg-gray-100 px-2 whitespace-nowrap"
+                    >
+                      {column.label}
+                    </TableHead>
+                  ))}
+                  <TableHead className="w-24 min-w-[96px] text-center font-semibold bg-gray-200 whitespace-nowrap">
+                    Actions
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {entries.map((entry, rowIndex) => (
+                  <TableRow key={rowIndex} className="hover:bg-blue-50">
+                    {/* Row Number */}
+                    <TableCell className="w-16 text-center text-sm bg-gray-50 font-medium">
+                      {rowIndex + 1}
+                    </TableCell>
+                    
+                    {/* Data Cells */}
+                    {COLUMNS.map((_, colIndex) => (
+                      <TableCell 
+                        key={colIndex}
+                        className="p-0 relative whitespace-nowrap"
+                        style={{ width: COLUMNS[colIndex].width, minWidth: COLUMNS[colIndex].width, maxWidth: COLUMNS[colIndex].width }}
+                      >
+                        {renderCell(entry, rowIndex, colIndex)}
+                      </TableCell>
+                    ))}
+                    
+                    {/* Actions */}
+                    <TableCell className="w-24 min-w-[96px] text-center bg-gray-50 whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => saveIndividualEntry(rowIndex)}
+                          disabled={isLoading || isReadOnlyMode}
+                          className="h-7 w-7 p-0 hover:bg-green-100"
+                          title="Save this entry"
+                        >
+                          <Save className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => deleteRow(rowIndex)}
+                          disabled={isLoading}
+                          className="h-7 w-7 p-0 hover:bg-red-100"
+                          title="Delete this entry"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+export default ManualTradeExcelGrid
