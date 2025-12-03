@@ -1,5 +1,5 @@
 from datetime import date
-from models import TradeEntryCreate, TradeEntryUpdate, ManualTradeEntryCreate, ManualTradeEntryUpdate, UserCreate, UserUpdate
+from models import TradeEntryCreate, TradeEntryUpdate, UserCreate, UserUpdate
 from typing import List, Optional
 
 def create_trade_entry(conn, entry: TradeEntryCreate, username: str) -> int:
@@ -353,227 +353,6 @@ def get_commodities_by_exchange(conn, exchange_id: int) -> List[dict]:
 
 
 # ============================================
-# MANUAL TRADE ENTRIES CRUD OPERATIONS
-# ============================================
-
-def create_manual_trade_entry(conn, entry: ManualTradeEntryCreate, username: str) -> int:
-    """
-    Create a new manual trade entry in the database.
-    Returns the ID of the created entry.
-    """
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO manual_trade_entries (
-            username, trade_date, strategy, code, exchange, commodity, expiry,
-            contract_type, strike_price, option_type,
-            buy_qty, buy_avg, sell_qty, sell_avg,
-            client_code, broker, team_name, entry_price,
-            exit_price, pnl, status, remark, tag, entry_time, exit_time
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        username,
-        entry.trade_date,
-        entry.strategy,
-        entry.code,
-        entry.exchange,
-        entry.commodity,
-        entry.expiry,
-        entry.contract_type,
-        entry.strike_price,
-        entry.option_type,
-        entry.buy_qty,
-        entry.buy_avg,
-        entry.sell_qty,
-        entry.sell_avg,
-        entry.client_code,
-        entry.broker,
-        entry.team_name,
-        entry.entry_price,
-        entry.exit_price,
-        entry.pnl,
-        entry.status,
-        entry.remark,
-        entry.tag,
-        entry.entry_time,
-        entry.exit_time
-    ))
-    return cursor.lastrowid
-
-
-def get_manual_trade_entries_by_date(conn, trade_date: date) -> List[dict]:
-    """
-    Get all manual trade entries for a specific date.
-    Returns a list of dictionaries.
-    """
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT * FROM manual_trade_entries
-        WHERE trade_date = ?
-        ORDER BY created_at DESC
-    """, (trade_date,))
-
-    rows = cursor.fetchall()
-    return [dict(row) for row in rows]
-
-
-def get_manual_trade_entry_by_id(conn, entry_id: int) -> Optional[dict]:
-    """
-    Get a single manual trade entry by ID.
-    Returns a dictionary or None if not found.
-    """
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT * FROM manual_trade_entries
-        WHERE id = ?
-    """, (entry_id,))
-
-    row = cursor.fetchone()
-    return dict(row) if row else None
-
-
-def update_manual_trade_entry(conn, entry_id: int, entry: ManualTradeEntryUpdate, username: str) -> bool:
-    """
-    Update an existing manual trade entry.
-    Returns True if successful, False if entry not found.
-    """
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE manual_trade_entries SET
-            username = ?,
-            trade_date = ?,
-            strategy = ?,
-            code = ?,
-            exchange = ?,
-            commodity = ?,
-            expiry = ?,
-            contract_type = ?,
-            strike_price = ?,
-            option_type = ?,
-            buy_qty = ?,
-            buy_avg = ?,
-            sell_qty = ?,
-            sell_avg = ?,
-            client_code = ?,
-            broker = ?,
-            team_name = ?,
-            entry_price = ?,
-            exit_price = ?,
-            pnl = ?,
-            status = ?,
-            remark = ?,
-            tag = ?,
-            entry_time = ?,
-            exit_time = ?
-        WHERE id = ?
-    """, (
-        username,
-        entry.trade_date,
-        entry.strategy,
-        entry.code,
-        entry.exchange,
-        entry.commodity,
-        entry.expiry,
-        entry.contract_type,
-        entry.strike_price,
-        entry.option_type,
-        entry.buy_qty,
-        entry.buy_avg,
-        entry.sell_qty,
-        entry.sell_avg,
-        entry.client_code,
-        entry.broker,
-        entry.team_name,
-        entry.entry_price,
-        entry.exit_price,
-        entry.pnl,
-        entry.status,
-        entry.remark,
-        entry.tag,
-        entry.entry_time,
-        entry.exit_time,
-        entry_id
-    ))
-    return cursor.rowcount > 0
-
-
-def delete_manual_trade_entry(conn, entry_id: int) -> bool:
-    """
-    Delete a manual trade entry by ID.
-    Returns True if successful, False if entry not found.
-    """
-    cursor = conn.cursor()
-    cursor.execute("""
-        DELETE FROM manual_trade_entries
-        WHERE id = ?
-    """, (entry_id,))
-    return cursor.rowcount > 0
-
-
-def get_all_manual_trade_entries(conn) -> List[dict]:
-    """
-    Get all manual trade entries (useful for testing).
-    Returns a list of dictionaries.
-    """
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT * FROM manual_trade_entries
-        ORDER BY trade_date DESC, created_at DESC
-    """)
-
-    rows = cursor.fetchall()
-    return [dict(row) for row in rows]
-
-
-def bulk_create_manual_trade_entries(conn, entries: List[ManualTradeEntryCreate], username: str) -> List[int]:
-    """
-    Create multiple manual trade entries in a single transaction.
-    Returns a list of IDs of the created entries.
-    """
-    cursor = conn.cursor()
-    created_ids = []
-
-    for entry in entries:
-        cursor.execute("""
-            INSERT INTO manual_trade_entries (
-                username, trade_date, strategy, code, exchange, commodity, expiry,
-                contract_type, strike_price, option_type,
-                buy_qty, buy_avg, sell_qty, sell_avg,
-                client_code, broker, team_name, entry_price,
-                exit_price, pnl, status, remark, tag, entry_time, exit_time
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            username,
-            entry.trade_date,
-            entry.strategy,
-            entry.code,
-            entry.exchange,
-            entry.commodity,
-            entry.expiry,
-            entry.contract_type,
-            entry.strike_price,
-            entry.option_type,
-            entry.buy_qty,
-            entry.buy_avg,
-            entry.sell_qty,
-            entry.sell_avg,
-            entry.client_code,
-            entry.broker,
-            entry.team_name,
-            entry.entry_price,
-            entry.exit_price,
-            entry.pnl,
-            entry.status,
-            entry.remark,
-            entry.tag,
-            entry.entry_time,
-            entry.exit_time
-        ))
-        created_ids.append(cursor.lastrowid)
-
-    return created_ids
-
-
-# ============================================
 # AUTHENTICATION CRUD OPERATIONS
 # ============================================
 
@@ -701,3 +480,94 @@ def delete_user(conn, user_id: int) -> bool:
     cursor = conn.cursor()
     cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
     return cursor.rowcount > 0
+
+
+# ============================================
+# TRADER ENTRIES LOGS CRUD OPERATIONS
+# ============================================
+
+def create_log_entry(conn, entry_id: int, operation_type: str, log_tag: str,
+                     entry_data: dict, changed_by: str) -> int:
+    """
+    Create a log entry for audit trail.
+
+    Args:
+        conn: Database connection
+        entry_id: ID of the trader_entries record
+        operation_type: 'UPDATE' or 'DELETE'
+        log_tag: 'before', 'after', or 'deleted'
+        entry_data: Dictionary containing the full entry snapshot
+        changed_by: Username who made the change
+
+    Returns:
+        ID of the created log entry
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO trader_entries_logs (
+            entry_id, operation_type, log_tag,
+            username, trade_date, strategy, code, exchange, commodity, expiry,
+            contract_type, strike_price, option_type,
+            buy_qty, buy_avg, sell_qty, sell_avg,
+            client_code, broker, team_name, status, remark, tag,
+            changed_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        entry_id,
+        operation_type,
+        log_tag,
+        entry_data.get('username'),
+        entry_data.get('trade_date'),
+        entry_data.get('strategy'),
+        entry_data.get('code'),
+        entry_data.get('exchange'),
+        entry_data.get('commodity'),
+        entry_data.get('expiry'),
+        entry_data.get('contract_type'),
+        entry_data.get('strike_price'),
+        entry_data.get('option_type'),
+        entry_data.get('buy_qty'),
+        entry_data.get('buy_avg'),
+        entry_data.get('sell_qty'),
+        entry_data.get('sell_avg'),
+        entry_data.get('client_code'),
+        entry_data.get('broker'),
+        entry_data.get('team_name'),
+        entry_data.get('status'),
+        entry_data.get('remark'),
+        entry_data.get('tag'),
+        changed_by
+    ))
+    return cursor.lastrowid
+
+
+def get_logs_by_entry_id(conn, entry_id: int) -> List[dict]:
+    """
+    Get all log entries for a specific trader entry.
+    Returns a list of dictionaries ordered by changed_at DESC.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM trader_entries_logs
+        WHERE entry_id = ?
+        ORDER BY changed_at DESC
+    """, (entry_id,))
+
+    rows = cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_all_logs(conn, limit: int = 100, offset: int = 0) -> List[dict]:
+    """
+    Get all log entries with pagination.
+    Returns a list of dictionaries ordered by changed_at DESC.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM trader_entries_logs
+        ORDER BY changed_at DESC
+        LIMIT ? OFFSET ?
+    """, (limit, offset))
+
+    rows = cursor.fetchall()
+    return [dict(row) for row in rows]

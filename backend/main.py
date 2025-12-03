@@ -34,9 +34,6 @@ from models import (
     MasterValueCreate,
     MasterValueResponse,
     MasterCategoryResponse,
-    ManualTradeEntryCreate,
-    ManualTradeEntryUpdate,
-    ManualTradeEntryResponse,
     LoginRequest,
     LoginResponse,
     UserCreate,
@@ -293,6 +290,26 @@ def update_trade_entry(entry_id: int, entry: TradeEntryUpdate, authorization: Op
         username = session["username"]
 
         with get_db() as conn:
+            # Get the old entry before updating (for logging)
+            old_entry = crud.get_trade_entry_by_id(conn, entry_id)
+
+            if not old_entry:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Trade entry with ID {entry_id} not found"
+                )
+
+            # Create log entry for the "before" state
+            crud.create_log_entry(
+                conn=conn,
+                entry_id=entry_id,
+                operation_type='UPDATE',
+                log_tag='before',
+                entry_data=old_entry,
+                changed_by=username
+            )
+
+            # Update the entry
             success = crud.update_trade_entry(conn, entry_id, entry, username)
 
             if not success:
@@ -301,7 +318,20 @@ def update_trade_entry(entry_id: int, entry: TradeEntryUpdate, authorization: Op
                     detail=f"Trade entry with ID {entry_id} not found"
                 )
 
+            # Get the updated entry (for logging)
             updated_entry = crud.get_trade_entry_by_id(conn, entry_id)
+
+            # Create log entry for the "after" state
+            crud.create_log_entry(
+                conn=conn,
+                entry_id=entry_id,
+                operation_type='UPDATE',
+                log_tag='after',
+                entry_data=updated_entry,
+                changed_by=username
+            )
+
+            conn.commit()
             return updated_entry
 
     except HTTPException:
@@ -314,7 +344,7 @@ def update_trade_entry(entry_id: int, entry: TradeEntryUpdate, authorization: Op
 
 
 @app.delete("/api/trade-entries/{entry_id}", response_model=DeleteResponse)
-def delete_trade_entry(entry_id: int):
+def delete_trade_entry(entry_id: int, authorization: Optional[str] = Header(None)):
     """
     Delete a trade entry.
 
@@ -322,7 +352,31 @@ def delete_trade_entry(entry_id: int):
     - Returns success message
     """
     try:
+        # Verify authentication and get user session
+        session = auth.verify_token(authorization)
+        username = session["username"]
+
         with get_db() as conn:
+            # Get the entry before deleting (for logging)
+            deleted_entry = crud.get_trade_entry_by_id(conn, entry_id)
+
+            if not deleted_entry:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Trade entry with ID {entry_id} not found"
+                )
+
+            # Create log entry for the deleted entry
+            crud.create_log_entry(
+                conn=conn,
+                entry_id=entry_id,
+                operation_type='DELETE',
+                log_tag='deleted',
+                entry_data=deleted_entry,
+                changed_by=username
+            )
+
+            # Delete the entry
             success = crud.delete_trade_entry(conn, entry_id)
 
             if not success:
@@ -330,6 +384,8 @@ def delete_trade_entry(entry_id: int):
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Trade entry with ID {entry_id} not found"
                 )
+
+            conn.commit()
 
             return {
                 "message": "Trade entry deleted successfully",
@@ -1160,208 +1216,6 @@ def get_commodities_by_exchange(exchange_id: int):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching commodities for exchange: {str(e)}"
-        )
-
-
-# ============================================
-# MANUAL TRADE ENTRIES ENDPOINTS
-# ============================================
-
-@app.post("/api/manual-trade-entries", response_model=ManualTradeEntryResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
-def create_manual_trade_entry(entry: ManualTradeEntryCreate, authorization: Optional[str] = Header(None)):
-    """
-    Create a new manual trade entry.
-
-    - **entry**: Manual trade entry data from the Excel-like grid
-    - Returns the created entry with ID and timestamps
-    """
-    try:
-        # Verify authentication and get user session
-        session = auth.verify_token(authorization)
-        username = session["username"]
-
-        with get_db() as conn:
-            entry_id = crud.create_manual_trade_entry(conn, entry, username)
-            created_entry = crud.get_manual_trade_entry_by_id(conn, entry_id)
-
-            if not created_entry:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Entry created but could not be retrieved"
-                )
-
-            return created_entry
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating manual trade entry: {str(e)}"
-        )
-
-
-@app.post("/api/manual-trade-entries/bulk", response_model=List[ManualTradeEntryResponse], response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
-def bulk_create_manual_trade_entries(entries: List[ManualTradeEntryCreate], authorization: Optional[str] = Header(None)):
-    """
-    Create multiple manual trade entries at once.
-
-    - **entries**: List of manual trade entry data from the Excel-like grid
-    - Returns the list of created entries with IDs and timestamps
-    """
-    try:
-        # Verify authentication and get user session
-        session = auth.verify_token(authorization)
-        username = session["username"]
-
-        with get_db() as conn:
-            entry_ids = crud.bulk_create_manual_trade_entries(conn, entries, username)
-            created_entries = []
-
-            for entry_id in entry_ids:
-                entry = crud.get_manual_trade_entry_by_id(conn, entry_id)
-                if entry:
-                    created_entries.append(entry)
-
-            return created_entries
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating manual trade entries: {str(e)}"
-        )
-
-
-@app.get("/api/manual-trade-entries/date/{trade_date}", response_model=List[ManualTradeEntryResponse], response_model_by_alias=True)
-def get_manual_trade_entries_by_date(trade_date: date):
-    """
-    Get all manual trade entries for a specific date.
-
-    - **trade_date**: Date in YYYY-MM-DD format
-    - Returns list of manual trade entries for that date
-    """
-    try:
-        with get_db() as conn:
-            entries = crud.get_manual_trade_entries_by_date(conn, trade_date)
-            return entries
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error fetching manual trade entries: {str(e)}"
-        )
-
-
-@app.get("/api/manual-trade-entries", response_model=List[ManualTradeEntryResponse], response_model_by_alias=True)
-def get_all_manual_trade_entries():
-    """
-    Get all manual trade entries (for testing/debugging).
-
-    - Returns list of all manual trade entries
-    """
-    try:
-        with get_db() as conn:
-            entries = crud.get_all_manual_trade_entries(conn)
-            return entries
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error fetching manual trade entries: {str(e)}"
-        )
-
-
-@app.get("/api/manual-trade-entries/{entry_id}", response_model=ManualTradeEntryResponse, response_model_by_alias=True)
-def get_manual_trade_entry(entry_id: int):
-    """
-    Get a specific manual trade entry by ID.
-
-    - **entry_id**: Manual trade entry ID
-    - Returns the manual trade entry data
-    """
-    try:
-        with get_db() as conn:
-            entry = crud.get_manual_trade_entry_by_id(conn, entry_id)
-
-            if not entry:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Manual trade entry with ID {entry_id} not found"
-                )
-
-            return entry
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error fetching manual trade entry: {str(e)}"
-        )
-
-
-@app.put("/api/manual-trade-entries/{entry_id}", response_model=ManualTradeEntryResponse, response_model_by_alias=True)
-def update_manual_trade_entry(entry_id: int, entry: ManualTradeEntryUpdate, authorization: Optional[str] = Header(None)):
-    """
-    Update an existing manual trade entry.
-
-    - **entry_id**: Manual trade entry ID to update
-    - **entry**: Updated manual trade entry data
-    - Returns the updated entry
-    """
-    try:
-        # Verify authentication and get user session
-        session = auth.verify_token(authorization)
-        username = session["username"]
-
-        with get_db() as conn:
-            success = crud.update_manual_trade_entry(conn, entry_id, entry, username)
-
-            if not success:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Manual trade entry with ID {entry_id} not found"
-                )
-
-            updated_entry = crud.get_manual_trade_entry_by_id(conn, entry_id)
-            return updated_entry
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error updating manual trade entry: {str(e)}"
-        )
-
-
-@app.delete("/api/manual-trade-entries/{entry_id}", response_model=DeleteResponse)
-def delete_manual_trade_entry(entry_id: int):
-    """
-    Delete a manual trade entry.
-
-    - **entry_id**: Manual trade entry ID to delete
-    - Returns success message
-    """
-    try:
-        with get_db() as conn:
-            success = crud.delete_manual_trade_entry(conn, entry_id)
-
-            if not success:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Manual trade entry with ID {entry_id} not found"
-                )
-
-            return {
-                "message": "Manual trade entry deleted successfully",
-                "id": entry_id
-            }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error deleting manual trade entry: {str(e)}"
         )
 
 

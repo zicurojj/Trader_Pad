@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Plus, Save, Trash2, Download } from 'lucide-react'
+import { Plus, Save, Trash2, Download, Upload } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -171,12 +171,13 @@ function ActionCellRenderer(props: ICellRendererParams) {
   }
 
   return (
-    <div className="flex items-center justify-center gap-1 h-full">
+    <div className="flex items-center justify-center gap-1 h-full" tabIndex={-1}>
       <button
         onClick={() => context.onSave(rowIndex)}
         disabled={context.isLoading || context.isReadOnly}
         className="h-7 w-7 p-0 hover:bg-green-100 rounded flex items-center justify-center disabled:opacity-50"
         title="Save this entry"
+        tabIndex={0}
       >
         <Save className="h-3 w-3" />
       </button>
@@ -185,6 +186,7 @@ function ActionCellRenderer(props: ICellRendererParams) {
         disabled={context.isLoading}
         className="h-7 w-7 p-0 hover:bg-red-100 rounded flex items-center justify-center disabled:opacity-50"
         title="Delete this entry"
+        tabIndex={0}
       >
         <Trash2 className="h-3 w-3" />
       </button>
@@ -202,10 +204,15 @@ export function ManualTradeExcelGrid() {
   const [isReadOnlyMode, setIsReadOnlyMode] = useState(false)
   const gridRef = useRef<AgGridReact>(null)
 
+  // Track which entries have been modified
+  const [modifiedEntryIds, setModifiedEntryIds] = useState<Set<number>>(new Set())
+
   // Cascading dropdown state
   const [filteredCodes, setFilteredCodes] = useState<{ [rowIndex: number]: any[] }>({})
   const [filteredExchanges, setFilteredExchanges] = useState<{ [rowIndex: number]: any[] }>({})
   const [filteredCommodities, setFilteredCommodities] = useState<{ [rowIndex: number]: any[] }>({})
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Fetch master data from API
   const fetchMasters = async () => {
@@ -259,8 +266,87 @@ export function ManualTradeExcelGrid() {
 
   const addNewRow = () => {
     const newEntry = { ...DEFAULT_ENTRY, tradeDate: selectedDate }
-    setEntries([...entries, newEntry])
+    setEntries([newEntry, ...entries])
     setIsReadOnlyMode(false)
+  }
+
+  // Download sample CSV format
+  const downloadSampleCSV = () => {
+    const headers = [
+      "trade_date",
+      "strategy",
+      "code",
+      "exchange",
+      "commodity",
+      "expiry",
+      "contract_type",
+      "strike_price",
+      "option_type",
+      "buy_qty",
+      "buy_avg",
+      "sell_qty",
+      "sell_avg",
+      "client_code",
+      "broker",
+      "team_name",
+      "status",
+      "remark",
+      "tag"
+    ]
+
+    const csvContent = headers.join(",")
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const link = document.createElement("a")
+    const url = URL.createObjectURL(blob)
+
+    link.setAttribute("href", url)
+    link.setAttribute("download", "example-trade-entry-format.csv")
+    link.style.visibility = "hidden"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  // Handle CSV upload
+  const handleUploadClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch(`${API_BASE_URL}/trade-entries/upload`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        alert(`Successfully uploaded ${result.count} trade entries!`)
+        await loadEntriesByDate(selectedDate)
+      } else {
+        const error = await response.json()
+        alert(`Upload failed: ${error.detail || 'Unknown error'}`)
+      }
+    } catch (error) {
+      console.error('Error uploading CSV:', error)
+      alert('Error uploading CSV file. Please try again.')
+    } finally {
+      setUploading(false)
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
   }
 
   // Define loadEntriesByDate FIRST so it can be used by other callbacks
@@ -268,7 +354,11 @@ export function ManualTradeExcelGrid() {
     setIsLoading(true)
     try {
       const targetDate = date || selectedDate
-      const response = await fetch(`${API_BASE_URL}/manual-trade-entries/date/${targetDate}`)
+      const response = await fetch(`${API_BASE_URL}/trade-entries/date/${targetDate}`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      })
 
       if (!response.ok) {
         throw new Error('Failed to load entries')
@@ -279,36 +369,39 @@ export function ManualTradeExcelGrid() {
       if (data.length > 0) {
         const convertedEntries = data.map((entry: any) => ({
           id: entry.id,
-          tradeDate: entry.tradeDate,
+          tradeDate: entry.tradeDate || entry.trade_date,
           strategy: entry.strategy,
           code: entry.code,
           exchange: entry.exchange,
           commodity: entry.commodity,
           expiry: entry.expiry,
-          contractType: entry.contractType,
-          strikePrice: entry.strikePrice,
-          optionType: entry.optionType,
-          buyQty: entry.buyQty,
-          buyAvg: entry.buyAvg,
-          sellQty: entry.sellQty,
-          sellAvg: entry.sellAvg,
-          clientCode: entry.clientCode,
+          contractType: entry.contractType || entry.contract_type,
+          strikePrice: entry.strikePrice || entry.strike_price,
+          optionType: entry.optionType || entry.option_type,
+          buyQty: entry.buyQty || entry.buy_qty,
+          buyAvg: entry.buyAvg || entry.buy_avg,
+          sellQty: entry.sellQty || entry.sell_qty,
+          sellAvg: entry.sellAvg || entry.sell_avg,
+          clientCode: entry.clientCode || entry.client_code,
           broker: entry.broker,
-          teamName: entry.teamName,
+          teamName: entry.teamName || entry.team_name,
           status: entry.status,
           remark: entry.remark,
           tag: entry.tag,
         }))
 
         setEntries(convertedEntries)
-        setIsReadOnlyMode(true)
+        setIsReadOnlyMode(false) // Allow editing loaded entries
+        setModifiedEntryIds(new Set()) // Clear modified entries when loading fresh data
       } else {
         setEntries([{ ...DEFAULT_ENTRY, tradeDate: selectedDate }])
         setIsReadOnlyMode(false)
+        setModifiedEntryIds(new Set())
       }
     } catch (error) {
       console.error('Error loading entries:', error)
       setEntries([{ ...DEFAULT_ENTRY, tradeDate: selectedDate }])
+      setModifiedEntryIds(new Set())
     } finally {
       setIsLoading(false)
     }
@@ -325,8 +418,11 @@ export function ManualTradeExcelGrid() {
     if (entry.id) {
       try {
         setIsLoading(true)
-        const response = await fetch(`${API_BASE_URL}/manual-trade-entries/${entry.id}`, {
+        const response = await fetch(`${API_BASE_URL}/trade-entries/${entry.id}`, {
           method: 'DELETE',
+          headers: {
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          },
         })
 
         if (!response.ok) {
@@ -336,6 +432,7 @@ export function ManualTradeExcelGrid() {
         await loadEntriesByDate(selectedDate)
       } catch (error) {
         console.error('Error deleting entry:', error)
+        alert('Error deleting entry. Please try again.')
       } finally {
         setIsLoading(false)
       }
@@ -345,7 +442,7 @@ export function ManualTradeExcelGrid() {
         setEntries(newEntries)
       }
     }
-  }, [entries, selectedDate, loadEntriesByDate])
+  }, [entries, selectedDate, token, loadEntriesByDate])
 
   const saveIndividualEntry = useCallback(async (rowIndex: number) => {
     const entry = entries[rowIndex]
@@ -384,7 +481,7 @@ export function ManualTradeExcelGrid() {
         tag: entry.tag,
       }
 
-      const response = await fetch(`${API_BASE_URL}/manual-trade-entries`, {
+      const response = await fetch(`${API_BASE_URL}/trade-entries`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -409,12 +506,21 @@ export function ManualTradeExcelGrid() {
   const saveAllEntries = async () => {
     setIsLoading(true)
     try {
-      const validEntries = entries.filter(entry =>
+      // Separate new entries (without ID) and modified existing entries (with ID and in modifiedEntryIds set)
+      const newEntries = entries.filter(entry =>
         entry.strategy && entry.code && entry.exchange && !entry.id
       )
 
-      if (validEntries.length > 0) {
-        const backendEntries = validEntries.map(entry => ({
+      const modifiedExistingEntries = entries.filter(entry =>
+        entry.id && entry.strategy && entry.code && entry.exchange && modifiedEntryIds.has(entry.id)
+      )
+
+      let savedCount = 0
+      let updatedCount = 0
+
+      // Save new entries using bulk endpoint
+      if (newEntries.length > 0) {
+        const backendEntries = newEntries.map(entry => ({
           trade_date: entry.tradeDate,
           strategy: entry.strategy,
           code: entry.code,
@@ -436,7 +542,7 @@ export function ManualTradeExcelGrid() {
           tag: entry.tag,
         }))
 
-        const response = await fetch(`${API_BASE_URL}/manual-trade-entries/bulk`, {
+        const response = await fetch(`${API_BASE_URL}/trade-entries/bulk`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -446,16 +552,70 @@ export function ManualTradeExcelGrid() {
         })
 
         if (!response.ok) {
-          throw new Error('Failed to save entries')
+          throw new Error('Failed to save new entries')
         }
 
-        await response.json()
+        savedCount = newEntries.length
       }
 
-      setEntries([{ ...DEFAULT_ENTRY, tradeDate: selectedDate }])
-      loadEntriesByDate(selectedDate)
+      // Update only modified existing entries
+      if (modifiedExistingEntries.length > 0) {
+        for (const entry of modifiedExistingEntries) {
+          const backendEntry = {
+            trade_date: entry.tradeDate,
+            strategy: entry.strategy,
+            code: entry.code,
+            exchange: entry.exchange,
+            commodity: entry.commodity,
+            expiry: entry.expiry,
+            contract_type: entry.contractType,
+            strike_price: entry.strikePrice,
+            option_type: entry.optionType,
+            buy_qty: entry.buyQty,
+            buy_avg: entry.buyAvg,
+            sell_qty: entry.sellQty,
+            sell_avg: entry.sellAvg,
+            client_code: entry.clientCode,
+            broker: entry.broker,
+            team_name: entry.teamName,
+            status: entry.status,
+            remark: entry.remark,
+            tag: entry.tag,
+          }
+
+          const response = await fetch(`${API_BASE_URL}/trade-entries/${entry.id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify(backendEntry),
+          })
+
+          if (response.ok) {
+            updatedCount++
+          }
+        }
+      }
+
+      // Show success message
+      if (savedCount > 0 || updatedCount > 0) {
+        const messages = []
+        if (savedCount > 0) messages.push(`${savedCount} new entr${savedCount === 1 ? 'y' : 'ies'} created`)
+        if (updatedCount > 0) messages.push(`${updatedCount} entr${updatedCount === 1 ? 'y' : 'ies'} updated`)
+        alert(`Success! ${messages.join(' and ')}.`)
+
+        // Clear modified entries set after successful save
+        setModifiedEntryIds(new Set())
+      } else {
+        alert('No valid entries to save.')
+      }
+
+      // Reload entries from database
+      await loadEntriesByDate(selectedDate)
     } catch (error) {
       console.error('Error saving entries:', error)
+      alert('Error saving entries. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -466,9 +626,47 @@ export function ManualTradeExcelGrid() {
     const rowIndex = event.rowIndex
     const field = event.colDef.field
     const newValue = event.newValue
+    const oldValue = event.oldValue
+
+    // Validation function for dropdown fields
+    const validateDropdownValue = (field: string, value: any): boolean => {
+      if (!value) return true // Allow empty values
+
+      const dropdownFields: { [key: string]: string[] } = {
+        strategy: masters.Strategy?.map(s => s.name) || [],
+        code: (filteredCodes[rowIndex] || masters.Code || []).map((c: any) => c.name),
+        exchange: (filteredExchanges[rowIndex] || masters.Exchange || []).map((e: any) => e.name),
+        commodity: (filteredCommodities[rowIndex] || masters.Commodity || []).map((c: any) => c.name),
+        contractType: masters['Contract Type']?.map(c => c.name) || [],
+        optionType: masters['Option Type']?.map(o => o.name) || [],
+        broker: masters.Broker?.map(b => b.name) || [],
+        teamName: masters['Team Name']?.map(t => t.name) || [],
+        status: masters.Status?.map(s => s.name) || []
+      }
+
+      if (dropdownFields[field]) {
+        return dropdownFields[field].includes(value)
+      }
+      return true
+    }
+
+    // Validate the new value
+    if (!validateDropdownValue(field, newValue)) {
+      alert(`Validation Failed: "${newValue}" is not a valid option for ${field}. Please select a value from the dropdown.`)
+
+      // Revert to old value
+      const node = event.node
+      node.setDataValue(field, oldValue)
+      return
+    }
 
     const newEntries = [...entries]
     newEntries[rowIndex] = { ...newEntries[rowIndex], [field]: newValue }
+
+    // Track modification if this entry has an ID (existing entry)
+    if (newEntries[rowIndex].id) {
+      setModifiedEntryIds(prev => new Set(prev).add(newEntries[rowIndex].id!))
+    }
 
     // Handle cascading dropdowns
     if (field === 'strategy') {
@@ -501,7 +699,7 @@ export function ManualTradeExcelGrid() {
     }
 
     setEntries(newEntries)
-  }, [entries, masters, filteredCodes, filteredExchanges])
+  }, [entries, masters, filteredCodes, filteredExchanges, filteredCommodities])
 
   // Column definitions
   const columnDefs = useMemo<ColDef[]>(() => [
@@ -678,7 +876,8 @@ export function ManualTradeExcelGrid() {
       pinned: 'right',
       editable: false,
       cellRenderer: ActionCellRenderer,
-      cellStyle: { backgroundColor: '#f8f9fa' }
+      cellStyle: { backgroundColor: '#f8f9fa' },
+      suppressNavigable: true
     }
   ], [masters, filteredCodes, filteredExchanges, filteredCommodities, isReadOnlyMode])
 
@@ -692,6 +891,51 @@ export function ManualTradeExcelGrid() {
     fetchMasters()
     loadEntriesByDate(selectedDate)
   }, [])
+
+  // Add keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Shift+Enter: Add new row
+      if (event.shiftKey && event.key === 'Enter') {
+        event.preventDefault()
+        addNewRow()
+      }
+
+      // Shift+Spacebar: Select the current row
+      else if (event.shiftKey && event.key === ' ') {
+        event.preventDefault()
+        const focusedCell = gridRef.current?.api?.getFocusedCell()
+        if (focusedCell) {
+          const rowNode = gridRef.current?.api?.getDisplayedRowAtIndex(focusedCell.rowIndex)
+          if (rowNode) {
+            rowNode.setSelected(true, true) // true = selected, true = clear other selections
+          }
+        }
+      }
+
+      // Delete: Delete the selected row (single row only)
+      else if (event.key === 'Delete') {
+        const selectedNodes = gridRef.current?.api?.getSelectedNodes()
+        if (selectedNodes && selectedNodes.length === 1) {
+          event.preventDefault()
+
+          const selectedIndex = selectedNodes[0].rowIndex
+          if (selectedIndex !== null && selectedIndex !== undefined) {
+            // Delete the row
+            deleteRow(selectedIndex)
+
+            // Clear selection
+            gridRef.current?.api?.deselectAll()
+          }
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [selectedDate, entries, deleteRow])
 
   return (
     <div className="space-y-6">
@@ -731,19 +975,37 @@ export function ManualTradeExcelGrid() {
           <Button
             onClick={() => loadEntriesByDate(selectedDate)}
             size="sm"
-            variant="outline"
             className="flex items-center gap-2"
             disabled={isLoading}
           >
             <Download className="h-4 w-4" />
             Load Trades
           </Button>
+          <Button
+            onClick={downloadSampleCSV}
+            size="sm"
+            className="flex items-center gap-2"
+          >
+            <Download className="h-4 w-4" />
+            Download Sample CSV
+          </Button>
+          <Button
+            onClick={handleUploadClick}
+            size="sm"
+            className="flex items-center gap-2"
+            disabled={uploading}
+          >
+            <Upload className="h-4 w-4" />
+            {uploading ? 'Uploading...' : 'Upload CSV'}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            onChange={handleFileUpload}
+            style={{ display: 'none' }}
+          />
         </div>
-      </div>
-
-      {/* Instructions */}
-      <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
-        <strong>Keyboard shortcuts:</strong> Tab/Shift+Tab to navigate cells | Enter to edit | Arrow keys to browse options | Escape to cancel
       </div>
 
       {/* AG Grid */}
@@ -758,15 +1020,21 @@ export function ManualTradeExcelGrid() {
               background-color: #f1f5f9;
               font-weight: 600;
             }
+            .ag-theme-alpine .ag-row-even {
+              background-color: #ffffff;
+            }
+            .ag-theme-alpine .ag-row-odd {
+              background-color: #dbeafe;
+            }
             .ag-theme-alpine .ag-row-hover {
-              background-color: #eff6ff !important;
+              background-color: #bfdbfe !important;
             }
             .ag-theme-alpine .ag-cell-focus {
               border: 2px solid #2563eb !important;
               outline: none !important;
             }
             .ag-theme-alpine .ag-cell-range-selected:not(.ag-cell-focus) {
-              background-color: #dbeafe !important;
+              background-color: #bfdbfe !important;
             }
           `}</style>
           <div className="ag-theme-alpine" style={{ height: 600, width: '100%' }}>
@@ -784,6 +1052,7 @@ export function ManualTradeExcelGrid() {
               onCellValueChanged={onCellValueChanged}
               singleClickEdit={true}
               stopEditingWhenCellsLoseFocus={true}
+              rowSelection="multiple"
               suppressRowClickSelection={true}
               animateRows={true}
               enterNavigatesVertically={false}
