@@ -20,11 +20,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { AutocompleteField } from "@/components/ui/autocomplete-field"
 import { DatePicker } from "@/components/ui/date-picker"
 import { TraderDataGrid } from "@/components/TraderDataGrid"
 import type { MasterData } from "@/types"
 import { API_BASE_URL } from "@/constants"
-import { X } from "lucide-react"
 
 const formSchema = z.object({
   date: z.string(),
@@ -65,6 +65,19 @@ export function TraderForm() {
   const [selectedStrategyId, setSelectedStrategyId] = useState<number | null>(null)
   const [selectedCodeId, setSelectedCodeId] = useState<number | null>(null)
   const [selectedExchangeId, setSelectedExchangeId] = useState<number | null>(null)
+
+  // Helper to focus next field
+  const focusNextField = (currentInput: HTMLInputElement) => {
+    const form = currentInput.closest('form')
+    if (!form) return
+    const focusables = Array.from(form.querySelectorAll<HTMLElement>(
+      'input:not([disabled]), select:not([disabled]), button:not([disabled]):not([type="button"]), [tabindex]:not([tabindex="-1"]):not([disabled])'
+    )).filter(el => el.offsetParent !== null) // visible elements only
+    const currentIndex = focusables.indexOf(currentInput)
+    if (currentIndex !== -1 && currentIndex < focusables.length - 1) {
+      focusables[currentIndex + 1]?.focus()
+    }
+  }
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -372,225 +385,123 @@ export function TraderForm() {
 
             {/* Remaining 15 fields in responsive grid */}
             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-              {/* Strategy - Dropdown */}
+              {/* Strategy - Autocomplete */}
               <FormField
                 control={form.control}
                 name="strategy"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Strategy</FormLabel>
-                    <div className="relative">
-                      <Select
-                        onValueChange={(value) => {
-                          field.onChange(value)
-                          // Find the selected strategy ID
-                          const selected = masters.Strategy?.find((item) => item.name === value)
-                          if (selected) {
-                            setSelectedStrategyId(selected.id)
-                            fetchCodesByStrategy(selected.id)
-                            // Reset dependent fields
-                            form.setValue("code", "")
-                            form.setValue("exchange", "")
-                            form.setValue("commodity", "")
-                            setFilteredExchanges([])
-                            setFilteredCommodities([])
-                          }
-                        }}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select strategy" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {masters.Strategy?.map((item) => (
-                            <SelectItem key={item.id} value={item.name}>
-                              {item.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {field.value && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            field.onChange("")
-                            setSelectedStrategyId(null)
-                            setFilteredCodes([])
-                            setFilteredExchanges([])
-                            setFilteredCommodities([])
-                            form.setValue("code", "")
-                            form.setValue("exchange", "")
-                            form.setValue("commodity", "")
-                          }}
-                          className="absolute right-8 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
+                  <AutocompleteField
+                    label="Strategy"
+                    placeholder="Type to search strategy..."
+                    value={field.value}
+                    options={masters.Strategy || []}
+                    onSelect={(item) => {
+                      field.onChange(item.name)
+                      setSelectedStrategyId(item.id)
+                      fetchCodesByStrategy(item.id)
+                      form.setValue("code", "")
+                      form.setValue("exchange", "")
+                      form.setValue("commodity", "")
+                      setFilteredExchanges([])
+                      setFilteredCommodities([])
+                    }}
+                    onClear={() => {
+                      field.onChange("")
+                      setSelectedStrategyId(null)
+                      setFilteredCodes([])
+                      setFilteredExchanges([])
+                      setFilteredCommodities([])
+                      form.setValue("code", "")
+                      form.setValue("exchange", "")
+                      form.setValue("commodity", "")
+                    }}
+                    focusNextField={focusNextField}
+                  />
                 )}
               />
 
-              {/* Code - Dropdown */}
+              {/* Code - Autocomplete */}
               <FormField
                 control={form.control}
                 name="code"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Code</FormLabel>
-                    <div className="relative">
-                      <Select
-                        onValueChange={(value) => {
-                          field.onChange(value)
-                          // Find the selected code ID
-                          const selected = filteredCodes.find((item) => item.name === value)
-                          if (selected) {
-                            setSelectedCodeId(selected.id)
-                            fetchExchangesByCode(selected.id)
-                            // Reset dependent fields
-                            form.setValue("exchange", "")
-                            form.setValue("commodity", "")
-                            setFilteredCommodities([])
-                          }
-                        }}
-                        value={field.value}
-                        disabled={!selectedStrategyId || filteredCodes.length === 0}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={selectedStrategyId ? "Select code" : "Select strategy first"} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {filteredCodes.map((item) => (
-                            <SelectItem key={item.id} value={item.name}>
-                              {item.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {field.value && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            field.onChange("")
-                            setSelectedCodeId(null)
-                            setFilteredExchanges([])
-                            setFilteredCommodities([])
-                            form.setValue("exchange", "")
-                            form.setValue("commodity", "")
-                          }}
-                          className="absolute right-8 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
+                  <AutocompleteField
+                    label="Code"
+                    placeholder="Type to search code..."
+                    disabledPlaceholder="Select strategy first"
+                    value={field.value}
+                    options={filteredCodes}
+                    disabled={!selectedStrategyId}
+                    onSelect={(item) => {
+                      field.onChange(item.name)
+                      setSelectedCodeId(item.id)
+                      fetchExchangesByCode(item.id)
+                      form.setValue("exchange", "")
+                      form.setValue("commodity", "")
+                      setFilteredCommodities([])
+                    }}
+                    onClear={() => {
+                      field.onChange("")
+                      setSelectedCodeId(null)
+                      setFilteredExchanges([])
+                      setFilteredCommodities([])
+                      form.setValue("exchange", "")
+                      form.setValue("commodity", "")
+                    }}
+                    focusNextField={focusNextField}
+                  />
                 )}
               />
 
-              {/* Exchange - Dropdown */}
+              {/* Exchange - Autocomplete */}
               <FormField
                 control={form.control}
                 name="exchange"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Exchange</FormLabel>
-                    <div className="relative">
-                      <Select
-                        onValueChange={(value) => {
-                          field.onChange(value)
-                          // Find the selected exchange ID
-                          const selected = filteredExchanges.find((item) => item.name === value)
-                          if (selected) {
-                            setSelectedExchangeId(selected.id)
-                            fetchCommoditiesByExchange(selected.id)
-                            // Reset dependent fields
-                            form.setValue("commodity", "")
-                          }
-                        }}
-                        value={field.value}
-                        disabled={!selectedCodeId || filteredExchanges.length === 0}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={selectedCodeId ? "Select exchange" : "Select code first"} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {filteredExchanges.map((item) => (
-                            <SelectItem key={item.id} value={item.name}>
-                              {item.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {field.value && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            field.onChange("")
-                            setSelectedExchangeId(null)
-                            setFilteredCommodities([])
-                            form.setValue("commodity", "")
-                          }}
-                          className="absolute right-8 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
+                  <AutocompleteField
+                    label="Exchange"
+                    placeholder="Type to search exchange..."
+                    disabledPlaceholder="Select code first"
+                    value={field.value}
+                    options={filteredExchanges}
+                    disabled={!selectedCodeId}
+                    onSelect={(item) => {
+                      field.onChange(item.name)
+                      setSelectedExchangeId(item.id)
+                      fetchCommoditiesByExchange(item.id)
+                      form.setValue("commodity", "")
+                    }}
+                    onClear={() => {
+                      field.onChange("")
+                      setSelectedExchangeId(null)
+                      setFilteredCommodities([])
+                      form.setValue("commodity", "")
+                    }}
+                    focusNextField={focusNextField}
+                  />
                 )}
               />
 
-              {/* Commodity - Dropdown */}
+              {/* Commodity - Autocomplete */}
               <FormField
                 control={form.control}
                 name="commodity"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Commodity</FormLabel>
-                    <div className="relative">
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                        disabled={!selectedExchangeId || filteredCommodities.length === 0}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={selectedExchangeId ? "Select commodity" : "Select exchange first"} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {filteredCommodities.map((item) => (
-                            <SelectItem key={item.id} value={item.name}>
-                              {item.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {field.value && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            field.onChange("")
-                          }}
-                          className="absolute right-8 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
+                  <AutocompleteField
+                    label="Commodity"
+                    placeholder="Type to search commodity..."
+                    disabledPlaceholder="Select exchange first"
+                    value={field.value}
+                    options={filteredCommodities}
+                    disabled={!selectedExchangeId}
+                    onSelect={(item) => {
+                      field.onChange(item.name)
+                    }}
+                    onClear={() => {
+                      field.onChange("")
+                    }}
+                    focusNextField={focusNextField}
+                  />
                 )}
               />
 
@@ -755,29 +666,20 @@ export function TraderForm() {
                 )}
               />
 
-              {/* Broker - Dropdown */}
+              {/* Broker - Autocomplete */}
               <FormField
                 control={form.control}
                 name="broker"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Broker</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select broker" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {masters.Broker?.map((item) => (
-                          <SelectItem key={item.id} value={item.name}>
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
+                  <AutocompleteField
+                    label="Broker"
+                    placeholder="Type to search broker..."
+                    value={field.value}
+                    options={masters.Broker || []}
+                    onSelect={(item) => field.onChange(item.name)}
+                    onClear={() => field.onChange("")}
+                    focusNextField={focusNextField}
+                  />
                 )}
               />
 
@@ -807,29 +709,20 @@ export function TraderForm() {
                 )}
               />
 
-              {/* Status - Dropdown */}
+              {/* Status - Autocomplete */}
               <FormField
                 control={form.control}
                 name="status"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select status" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {masters["Status"]?.map((item) => (
-                          <SelectItem key={item.id} value={item.name}>
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
+                  <AutocompleteField
+                    label="Status"
+                    placeholder="Type to search status..."
+                    value={field.value}
+                    options={masters["Status"] || []}
+                    onSelect={(item) => field.onChange(item.name)}
+                    onClear={() => field.onChange("")}
+                    focusNextField={focusNextField}
+                  />
                 )}
               />
 
@@ -877,8 +770,14 @@ export function TraderForm() {
           date={currentDate}
           entries={entries}
           masters={masters}
+          token={token}
           onUpdateEntry={handleUpdateEntry}
           onDeleteEntry={handleDeleteEntry}
+          onUploadSuccess={() => fetchEntries(currentDate)}
+          onDateChange={(newDate) => {
+            setCurrentDate(newDate)
+            fetchEntries(newDate)
+          }}
         />
       </div>
     </div>

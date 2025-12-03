@@ -1,7 +1,30 @@
-from fastapi import FastAPI, HTTPException, status, Header
+from fastapi import FastAPI, HTTPException, status, Header, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import date
+from datetime import date, datetime
 from typing import List, Optional
+import csv
+import io
+
+
+def parse_date(date_str: str) -> date:
+    """Parse date from various formats (DD-MM-YYYY or YYYY-MM-DD)"""
+    if not date_str:
+        return None
+    # Try DD-MM-YYYY format first
+    try:
+        return datetime.strptime(date_str, '%d-%m-%Y').date()
+    except ValueError:
+        pass
+    # Try YYYY-MM-DD format
+    try:
+        return datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        pass
+    # Try DD/MM/YYYY format
+    try:
+        return datetime.strptime(date_str, '%d/%m/%Y').date()
+    except ValueError:
+        raise ValueError(f"Invalid date format: {date_str}. Use DD-MM-YYYY or YYYY-MM-DD")
 
 from models import (
     TradeEntryCreate,
@@ -81,6 +104,88 @@ def create_trade_entry(entry: TradeEntryCreate, authorization: Optional[str] = H
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating trade entry: {str(e)}"
+        )
+
+
+@app.post("/api/trade-entries/upload", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def upload_trade_entries_csv(file: UploadFile = File(...), authorization: Optional[str] = Header(None)):
+    """
+    Upload trade entries from a CSV file.
+
+    - **file**: CSV file with trade entries (headers must match DB columns)
+    - Returns count of created entries
+    """
+    try:
+        # Verify authentication and get user session
+        session = auth.verify_token(authorization)
+        username = session["username"]
+
+        # Read and parse CSV file
+        contents = await file.read()
+        decoded = contents.decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(decoded))
+
+        entries = []
+        row_errors = []
+
+        for row_num, row in enumerate(csv_reader, start=2):  # Start at 2 to account for header row
+            try:
+                # Parse dates from various formats
+                trade_date_parsed = parse_date(row.get('trade_date', ''))
+                expiry_parsed = parse_date(row.get('expiry', ''))
+
+                entry = TradeEntryCreate(
+                    trade_date=trade_date_parsed,
+                    strategy=row.get('strategy', ''),
+                    code=row.get('code', ''),
+                    exchange=row.get('exchange', ''),
+                    commodity=row.get('commodity', ''),
+                    expiry=expiry_parsed,
+                    contract_type=row.get('contract_type', ''),
+                    strike_price=float(row.get('strike_price', 0)),
+                    option_type=row.get('option_type', ''),
+                    buy_qty=int(row.get('buy_qty')) if row.get('buy_qty') else None,
+                    buy_avg=float(row.get('buy_avg')) if row.get('buy_avg') else None,
+                    sell_qty=int(row.get('sell_qty')) if row.get('sell_qty') else None,
+                    sell_avg=float(row.get('sell_avg')) if row.get('sell_avg') else None,
+                    client_code=row.get('client_code', ''),
+                    broker=row.get('broker', ''),
+                    team_name=row.get('team_name', ''),
+                    status=row.get('status', ''),
+                    remark=row.get('remark', ''),
+                    tag=row.get('tag', '')
+                )
+                entries.append(entry)
+            except Exception as e:
+                row_errors.append(f"Row {row_num}: {str(e)}")
+
+        if row_errors:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"CSV parsing errors: {'; '.join(row_errors[:5])}"  # Show first 5 errors
+            )
+
+        if not entries:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No valid entries found in CSV file"
+            )
+
+        with get_db() as conn:
+            entry_ids = crud.bulk_create_trade_entries(conn, entries, username)
+
+            return {
+                "message": f"Successfully uploaded {len(entry_ids)} trade entries",
+                "count": len(entry_ids),
+                "ids": entry_ids
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error uploading CSV: {str(e)}"
         )
 
 
@@ -366,6 +471,87 @@ def create_master_value(category: str, value: MasterValueCreate):
         )
 
 
+@app.delete("/api/masters/{category}/by-name/{name}", response_model=DeleteResponse)
+def delete_master_value_with_cascade(category: str, name: str):
+    """
+    Delete a master value by name and cascade delete all associated mappings.
+
+    - **category**: Master category name (Strategy, Code, Exchange)
+    - **name**: Name of the value to delete
+    - Deletes all associated mappings before deleting the master value
+    - Returns success message with count of deleted mappings
+    """
+    try:
+        with get_db() as conn:
+            cursor = conn.cursor()
+
+            # Get the table name for the category
+            table_name = crud.MASTER_TABLE_MAP.get(category)
+            if not table_name:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid master category: {category}"
+                )
+
+            # Get the ID of the value
+            cursor.execute(f"SELECT id FROM {table_name} WHERE name = ?", (name,))
+            row = cursor.fetchone()
+            if not row:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"'{name}' not found in {category}"
+                )
+            value_id = row["id"]
+
+            deleted_mappings = 0
+
+            # Delete associated mappings based on category
+            if category == "Strategy":
+                # Delete all strategy-code mappings for this strategy
+                cursor.execute("DELETE FROM strategy_code WHERE strategy_id = ?", (value_id,))
+                deleted_mappings = cursor.rowcount
+            elif category == "Code":
+                # Delete all strategy-code mappings for this code
+                cursor.execute("DELETE FROM strategy_code WHERE code_id = ?", (value_id,))
+                deleted_mappings += cursor.rowcount
+                # Delete all code-exchange mappings for this code
+                cursor.execute("DELETE FROM code_exchange WHERE code_id = ?", (value_id,))
+                deleted_mappings += cursor.rowcount
+            elif category == "Exchange":
+                # Delete all code-exchange mappings for this exchange
+                cursor.execute("DELETE FROM code_exchange WHERE exchange_id = ?", (value_id,))
+                deleted_mappings += cursor.rowcount
+                # Delete all exchange-commodity mappings for this exchange
+                cursor.execute("DELETE FROM exchange_commodity WHERE exchange_id = ?", (value_id,))
+                deleted_mappings += cursor.rowcount
+            elif category == "Commodity":
+                # Delete all exchange-commodity mappings for this commodity
+                cursor.execute("DELETE FROM exchange_commodity WHERE commodity_id = ?", (value_id,))
+                deleted_mappings = cursor.rowcount
+
+            # Now delete the master value itself
+            cursor.execute(f"DELETE FROM {table_name} WHERE id = ?", (value_id,))
+
+            if cursor.rowcount == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to delete '{name}' from {category}"
+                )
+
+            return {
+                "message": f"'{name}' deleted from {category} along with {deleted_mappings} associated mapping(s)",
+                "id": value_id
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting master value with cascade: {str(e)}"
+        )
+
+
 @app.delete("/api/masters/{category}/{value_id}", response_model=DeleteResponse)
 def delete_master_value(category: str, value_id: int):
     """
@@ -451,9 +637,10 @@ def get_strategy_code_mappings():
 def create_strategy_code_mapping(mapping: dict):
     """
     Create a new strategy-code mapping.
+    If the code doesn't exist, it will be auto-created.
 
     - **strategyName**: Name of the strategy
-    - **codeName**: Name of the code to map
+    - **codeName**: Name of the code to map (will be created if doesn't exist)
     """
     try:
         strategy_name = mapping.get("strategyName")
@@ -478,15 +665,15 @@ def create_strategy_code_mapping(mapping: dict):
                 )
             strategy_id = strategy_row["id"]
 
-            # Get code ID
+            # Get code ID - auto-create if it doesn't exist
             cursor.execute("SELECT id FROM code WHERE name = ?", (code_name,))
             code_row = cursor.fetchone()
             if not code_row:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Code '{code_name}' not found"
-                )
-            code_id = code_row["id"]
+                # Auto-create the code
+                cursor.execute("INSERT INTO code (name) VALUES (?)", (code_name,))
+                code_id = cursor.lastrowid
+            else:
+                code_id = code_row["id"]
 
             # Check if mapping already exists
             cursor.execute(
@@ -624,6 +811,7 @@ def get_code_exchange_mappings():
 def create_code_exchange_mapping(mapping: dict):
     """
     Create a new code-exchange mapping.
+    If the exchange doesn't exist, it will be auto-created.
     """
     try:
         code_name = mapping.get("codeName")
@@ -648,15 +836,15 @@ def create_code_exchange_mapping(mapping: dict):
                 )
             code_id = code_row["id"]
 
-            # Get exchange ID
+            # Get exchange ID - auto-create if it doesn't exist
             cursor.execute("SELECT id FROM exchange WHERE name = ?", (exchange_name,))
             exchange_row = cursor.fetchone()
             if not exchange_row:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Exchange '{exchange_name}' not found"
-                )
-            exchange_id = exchange_row["id"]
+                # Auto-create the exchange
+                cursor.execute("INSERT INTO exchange (name) VALUES (?)", (exchange_name,))
+                exchange_id = cursor.lastrowid
+            else:
+                exchange_id = exchange_row["id"]
 
             # Check if mapping already exists
             cursor.execute(
@@ -791,6 +979,7 @@ def get_exchange_commodity_mappings():
 def create_exchange_commodity_mapping(mapping: dict):
     """
     Create a new exchange-commodity mapping.
+    If the commodity doesn't exist, it will be auto-created.
     """
     try:
         exchange_name = mapping.get("exchangeName")
@@ -815,15 +1004,15 @@ def create_exchange_commodity_mapping(mapping: dict):
                 )
             exchange_id = exchange_row["id"]
 
-            # Get commodity ID
+            # Get commodity ID - auto-create if it doesn't exist
             cursor.execute("SELECT id FROM commodity WHERE name = ?", (commodity_name,))
             commodity_row = cursor.fetchone()
             if not commodity_row:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Commodity '{commodity_name}' not found"
-                )
-            commodity_id = commodity_row["id"]
+                # Auto-create the commodity
+                cursor.execute("INSERT INTO commodity (name) VALUES (?)", (commodity_name,))
+                commodity_id = cursor.lastrowid
+            else:
+                commodity_id = commodity_row["id"]
 
             # Check if mapping already exists
             cursor.execute(

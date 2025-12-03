@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { DatePicker } from '@/components/ui/date-picker';
 import { TraderDataGrid } from '@/components/TraderDataGrid';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -146,15 +145,6 @@ export function AllTradeEntries() {
             <CardTitle>All Trade Entries</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="mb-6">
-              <label className="block text-sm font-medium mb-2">Select Date</label>
-              <DatePicker
-                value={currentDate}
-                onChange={handleDateChange}
-                placeholder="Select trade date"
-              />
-            </div>
-
             {error && (
               <Alert variant="destructive" className="mb-4">
                 <AlertDescription>{error}</AlertDescription>
@@ -170,6 +160,7 @@ export function AllTradeEntries() {
                 masters={masters}
                 onUpdateEntry={handleUpdateEntry}
                 onDeleteEntry={handleDeleteEntry}
+                onDateChange={handleDateChange}
               />
             )}
           </CardContent>

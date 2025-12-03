@@ -1,7 +1,6 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { FileText, Settings, Grid3x3, Users, LogOut, Database } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
 import {
   Sidebar,
   SidebarContent,

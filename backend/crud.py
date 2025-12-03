@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date
 from models import TradeEntryCreate, TradeEntryUpdate, ManualTradeEntryCreate, ManualTradeEntryUpdate, UserCreate, UserUpdate
 from typing import List, Optional
 
@@ -38,6 +38,49 @@ def create_trade_entry(conn, entry: TradeEntryCreate, username: str) -> int:
         entry.tag
     ))
     return cursor.lastrowid
+
+
+def bulk_create_trade_entries(conn, entries: List[TradeEntryCreate], username: str) -> List[int]:
+    """
+    Create multiple trade entries in the database.
+    Returns the list of IDs of the created entries.
+    """
+    cursor = conn.cursor()
+    entry_ids = []
+
+    for entry in entries:
+        cursor.execute("""
+            INSERT INTO trader_entries (
+                username, trade_date, strategy, code, exchange, commodity, expiry,
+                contract_type, strike_price, option_type,
+                buy_qty, buy_avg, sell_qty, sell_avg,
+                client_code, broker, team_name, status, remark, tag
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            username,
+            entry.trade_date,
+            entry.strategy,
+            entry.code,
+            entry.exchange,
+            entry.commodity,
+            entry.expiry,
+            entry.contract_type,
+            entry.strike_price,
+            entry.option_type,
+            entry.buy_qty,
+            entry.buy_avg,
+            entry.sell_qty,
+            entry.sell_avg,
+            entry.client_code,
+            entry.broker,
+            entry.team_name,
+            entry.status,
+            entry.remark,
+            entry.tag
+        ))
+        entry_ids.append(cursor.lastrowid)
+
+    return entry_ids
 
 
 def get_trade_entries_by_date(conn, trade_date: date) -> List[dict]:

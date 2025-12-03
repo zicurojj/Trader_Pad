@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useRef } from "react"
 import {
   Table,
   TableBody,
@@ -23,15 +23,20 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Filter, Download } from "lucide-react"
+import { Filter, Download, Upload } from "lucide-react"
+import { DatePicker } from "@/components/ui/date-picker"
 import type { TraderEntry, MasterData } from "@/types"
+import { API_BASE_URL } from "@/constants"
 
 type TraderDataGridProps = {
   date: string
   entries: TraderEntry[]
   masters: MasterData
+  token?: string | null
   onUpdateEntry: (id: number, updatedEntry: TraderEntry) => void
   onDeleteEntry: (id: number) => void
+  onUploadSuccess?: () => void
+  onDateChange?: (date: string) => void
 }
 
 // Filter Popover Component
@@ -101,10 +106,12 @@ function FilterPopover({
   )
 }
 
-export function TraderDataGrid({ date, entries, masters, onUpdateEntry, onDeleteEntry }: TraderDataGridProps) {
+export function TraderDataGrid({ date, entries, masters, token, onUpdateEntry, onDeleteEntry, onUploadSuccess, onDateChange }: TraderDataGridProps) {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editedEntry, setEditedEntry] = useState<TraderEntry | null>(null)
   const [filters, setFilters] = useState<{ [key: string]: string[] }>({})
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Get unique values for each column
   const getUniqueValues = (field: keyof TraderEntry) => {
@@ -177,13 +184,6 @@ export function TraderDataGrid({ date, entries, masters, onUpdateEntry, onDelete
     }
   }
 
-  // Format date from YYYY-MM-DD to DD/MM/YYYY for display
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return ""
-    const [year, month, day] = dateStr.split("-")
-    return `${day}/${month}/${year}`
-  }
-
   // Download entries as CSV
   const handleDownload = () => {
     // Define CSV headers
@@ -194,9 +194,12 @@ export function TraderDataGrid({ date, entries, masters, onUpdateEntry, onDelete
       "Commodity",
       "Expiry",
       "Contract Type",
-      "Trade Type",
       "Strike Price",
       "Option Type",
+      "Buy Qty",
+      "Buy Avg",
+      "Sell Qty",
+      "Sell Avg",
       "Client Code",
       "Broker",
       "Team Name",
@@ -215,16 +218,19 @@ export function TraderDataGrid({ date, entries, masters, onUpdateEntry, onDelete
         entry.commodity,
         entry.expiry,
         entry.contractType,
-        entry.tradeType,
         entry.strikePrice,
         entry.optionType,
+        entry.buyQty,
+        entry.buyAvg,
+        entry.sellQty,
+        entry.sellAvg,
         entry.clientCode,
         entry.broker,
         entry.teamName,
         entry.status,
         entry.remark,
         entry.tag
-      ].map(field => `"${field}"`).join(",")) // Escape fields with quotes
+      ].map(field => `"${field ?? ""}"`).join(",")) // Escape fields with quotes
     ]
 
     // Create CSV content
@@ -243,21 +249,145 @@ export function TraderDataGrid({ date, entries, masters, onUpdateEntry, onDelete
     document.body.removeChild(link)
   }
 
+  // Download sample format CSV with headers only
+  const handleDownloadSampleFormat = () => {
+    const headers = [
+      "trade_date",
+      "strategy",
+      "code",
+      "exchange",
+      "commodity",
+      "expiry",
+      "contract_type",
+      "strike_price",
+      "option_type",
+      "buy_qty",
+      "buy_avg",
+      "sell_qty",
+      "sell_avg",
+      "client_code",
+      "broker",
+      "team_name",
+      "status",
+      "remark",
+      "tag"
+    ]
+
+    const csvContent = headers.join(",")
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const link = document.createElement("a")
+    const url = URL.createObjectURL(blob)
+
+    link.setAttribute("href", url)
+    link.setAttribute("download", "trade-entries-sample-format.csv")
+    link.style.visibility = "hidden"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  // Handle file upload
+  const handleUploadClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Reset input so the same file can be selected again
+    event.target.value = ''
+
+    if (!file.name.endsWith('.csv')) {
+      alert('Please upload a CSV file')
+      return
+    }
+
+    try {
+      setUploading(true)
+
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch(`${API_BASE_URL}/trade-entries/upload`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        alert(result.message)
+        onUploadSuccess?.()
+      } else {
+        const error = await response.json()
+        alert(`Upload failed: ${error.detail}`)
+      }
+    } catch (error) {
+      console.error('Error uploading file:', error)
+      alert('Error uploading file. Please try again.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   return (
     <Card className="mt-8">
       <CardHeader className="bg-slate-50 border-b">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg">Entries for {formatDate(date)}</CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleDownload}
-            disabled={filteredEntries.length === 0}
-            className="gap-2"
-          >
-            <Download className="h-4 w-4" />
-            Download CSV
-          </Button>
+          <div className="flex items-center gap-4">
+            <CardTitle className="text-lg">Entries for</CardTitle>
+            <DatePicker
+              value={date}
+              onChange={(newDate) => {
+                if (newDate && onDateChange) {
+                  onDateChange(newDate)
+                }
+              }}
+              placeholder="Select date"
+            />
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept=".csv"
+              className="hidden"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleUploadClick}
+              disabled={uploading}
+              className="gap-2"
+            >
+              <Upload className="h-4 w-4" />
+              {uploading ? 'Uploading...' : 'Upload'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadSampleFormat}
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Download Sample Format
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownload}
+              disabled={filteredEntries.length === 0}
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Download CSV
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="p-0">
@@ -331,19 +461,6 @@ export function TraderDataGrid({ date, entries, masters, onUpdateEntry, onDelete
                     />
                   </div>
                 </TableHead>
-                <TableHead className="font-bold text-slate-900 border-r h-10 px-2 text-xs">
-                  <div className="flex items-center gap-1">
-                    <span>Trade Type</span>
-                    <FilterPopover
-                      field="tradeType"
-                      label="Trade Type"
-                      values={getUniqueValues("tradeType")}
-                      activeFilters={filters.tradeType || []}
-                      onToggleFilter={(value) => toggleFilter("tradeType", value)}
-                      onClearFilter={() => clearFilter("tradeType")}
-                    />
-                  </div>
-                </TableHead>
                 <TableHead className="font-bold text-slate-900 border-r h-10 px-2 text-xs whitespace-nowrap">Strike Price</TableHead>
                 <TableHead className="font-bold text-slate-900 border-r h-10 px-2 text-xs">
                   <div className="flex items-center gap-1">
@@ -358,6 +475,10 @@ export function TraderDataGrid({ date, entries, masters, onUpdateEntry, onDelete
                     />
                   </div>
                 </TableHead>
+                <TableHead className="font-bold text-slate-900 border-r h-10 px-2 text-xs whitespace-nowrap">Buy Qty</TableHead>
+                <TableHead className="font-bold text-slate-900 border-r h-10 px-2 text-xs whitespace-nowrap">Buy Avg</TableHead>
+                <TableHead className="font-bold text-slate-900 border-r h-10 px-2 text-xs whitespace-nowrap">Sell Qty</TableHead>
+                <TableHead className="font-bold text-slate-900 border-r h-10 px-2 text-xs whitespace-nowrap">Sell Avg</TableHead>
                 <TableHead className="font-bold text-slate-900 border-r h-10 px-2 text-xs whitespace-nowrap">Client Code</TableHead>
                 <TableHead className="font-bold text-slate-900 border-r h-10 px-2 text-xs">
                   <div className="flex items-center gap-1">
@@ -418,7 +539,7 @@ export function TraderDataGrid({ date, entries, masters, onUpdateEntry, onDelete
             <TableBody>
               {filteredEntries.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={16} className="text-center text-muted-foreground h-24 border-0">
+                  <TableCell colSpan={19} className="text-center text-muted-foreground h-24 border-0">
                     {entries.length === 0 ? "No entries found for this date" : "No entries match the current filters"}
                   </TableCell>
                 </TableRow>
@@ -561,29 +682,6 @@ export function TraderDataGrid({ date, entries, masters, onUpdateEntry, onDelete
                         )}
                       </TableCell>
 
-                      {/* Trade Type */}
-                      <TableCell className="border-r border-slate-200 px-3 py-2 text-sm">
-                        {isEditing ? (
-                          <Select
-                            value={displayEntry.tradeType}
-                            onValueChange={(value) => updateField('tradeType', value)}
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {masters["Trade Type"]?.map((item) => (
-                                <SelectItem key={item.id} value={item.name}>
-                                  {item.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          displayEntry.tradeType
-                        )}
-                      </TableCell>
-
                       {/* Strike Price */}
                       <TableCell className="border-r border-slate-200 px-3 py-2 text-sm">
                         {isEditing ? (
@@ -618,6 +716,64 @@ export function TraderDataGrid({ date, entries, masters, onUpdateEntry, onDelete
                           </Select>
                         ) : (
                           displayEntry.optionType
+                        )}
+                      </TableCell>
+
+                      {/* Buy Qty */}
+                      <TableCell className="border-r border-slate-200 px-3 py-2 text-sm">
+                        {isEditing ? (
+                          <Input
+                            type="number"
+                            value={displayEntry.buyQty}
+                            onChange={(e) => updateField('buyQty', e.target.value)}
+                            className="h-8 text-xs"
+                          />
+                        ) : (
+                          displayEntry.buyQty
+                        )}
+                      </TableCell>
+
+                      {/* Buy Avg */}
+                      <TableCell className="border-r border-slate-200 px-3 py-2 text-sm">
+                        {isEditing ? (
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={displayEntry.buyAvg}
+                            onChange={(e) => updateField('buyAvg', e.target.value)}
+                            className="h-8 text-xs"
+                          />
+                        ) : (
+                          displayEntry.buyAvg
+                        )}
+                      </TableCell>
+
+                      {/* Sell Qty */}
+                      <TableCell className="border-r border-slate-200 px-3 py-2 text-sm">
+                        {isEditing ? (
+                          <Input
+                            type="number"
+                            value={displayEntry.sellQty}
+                            onChange={(e) => updateField('sellQty', e.target.value)}
+                            className="h-8 text-xs"
+                          />
+                        ) : (
+                          displayEntry.sellQty
+                        )}
+                      </TableCell>
+
+                      {/* Sell Avg */}
+                      <TableCell className="border-r border-slate-200 px-3 py-2 text-sm">
+                        {isEditing ? (
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={displayEntry.sellAvg}
+                            onChange={(e) => updateField('sellAvg', e.target.value)}
+                            className="h-8 text-xs"
+                          />
+                        ) : (
+                          displayEntry.sellAvg
                         )}
                       </TableCell>
 

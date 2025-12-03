@@ -9,6 +9,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 import type { MasterValue, MasterData } from "@/types"
 import { API_BASE_URL } from "@/constants"
 import { AgGridReact } from 'ag-grid-react'
@@ -71,8 +80,13 @@ class AutocompleteCellEditorClass {
         this.renderDropdown();
       } else if (e.key === 'Enter') {
         e.preventDefault();
+        // If there's a highlighted item in dropdown, use it
+        // Otherwise, use the typed input value (allows creating new entries)
         if (this.filteredValues[this.highlightedIndex] !== undefined) {
           this.value = this.filteredValues[this.highlightedIndex];
+        } else {
+          // Use the typed value to create a new entry
+          this.value = this.eInput.value.trim();
         }
         this.params.stopEditing();
       } else if (e.key === 'Escape') {
@@ -90,6 +104,21 @@ class AutocompleteCellEditorClass {
 
   renderDropdown() {
     this.eDropdown.innerHTML = '';
+    const inputVal = this.eInput.value.trim();
+
+    // Show "Create new" option if user typed something not in the list
+    const exactMatch = this.values.some(v => v.toLowerCase() === inputVal.toLowerCase());
+    if (inputVal && !exactMatch) {
+      const createItem = document.createElement('div');
+      createItem.textContent = `+ Create "${inputVal}"`;
+      createItem.style.cssText = `padding: 8px 12px; cursor: pointer; background-color: ${this.filteredValues.length === 0 && this.highlightedIndex === 0 ? '#e6f7ff' : '#f0fff0'}; border-bottom: 1px solid #f0f0f0; color: #52c41a; font-weight: 500;`;
+      createItem.addEventListener('click', () => {
+        this.value = inputVal;
+        this.params.stopEditing();
+      });
+      this.eDropdown.appendChild(createItem);
+    }
+
     this.filteredValues.forEach((v, index) => {
       const item = document.createElement('div');
       item.textContent = v || '(empty)';
@@ -157,33 +186,45 @@ export function Masters() {
   const [availableCodes, setAvailableCodes] = useState<string[]>([])
   const [availableExchanges, setAvailableExchanges] = useState<string[]>([])
   const [availableCommodities, setAvailableCommodities] = useState<string[]>([])
+  const [availableStrategies, setAvailableStrategies] = useState<string[]>([])
+  const [showAddDialog, setShowAddDialog] = useState(false)
+  const [newItemName, setNewItemName] = useState('')
+  const [addingType, setAddingType] = useState<'Strategy' | 'Code' | 'Exchange'>('Strategy')
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [deletingItem, setDeletingItem] = useState<{ name: string; type: 'Strategy' | 'Code' | 'Exchange' } | null>(null)
 
   // Fetch available dropdown values
-  useEffect(() => {
-    const fetchDropdownValues = async () => {
-      try {
-        const [codesRes, exchangesRes, commoditiesRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/masters/Code`),
-          fetch(`${API_BASE_URL}/masters/Exchange`),
-          fetch(`${API_BASE_URL}/masters/Commodity`)
-        ])
+  const fetchDropdownValues = async () => {
+    try {
+      const [strategiesRes, codesRes, exchangesRes, commoditiesRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/masters/Strategy`),
+        fetch(`${API_BASE_URL}/masters/Code`),
+        fetch(`${API_BASE_URL}/masters/Exchange`),
+        fetch(`${API_BASE_URL}/masters/Commodity`)
+      ])
 
-        if (codesRes.ok) {
-          const data = await codesRes.json()
-          setAvailableCodes(data.map((c: MasterValue) => c.name).sort())
-        }
-        if (exchangesRes.ok) {
-          const data = await exchangesRes.json()
-          setAvailableExchanges(data.map((e: MasterValue) => e.name).sort())
-        }
-        if (commoditiesRes.ok) {
-          const data = await commoditiesRes.json()
-          setAvailableCommodities(data.map((c: MasterValue) => c.name).sort())
-        }
-      } catch (error) {
-        console.error("Error fetching dropdown values:", error)
+      if (strategiesRes.ok) {
+        const data = await strategiesRes.json()
+        setAvailableStrategies(data.map((s: MasterValue) => s.name).sort())
       }
+      if (codesRes.ok) {
+        const data = await codesRes.json()
+        setAvailableCodes(data.map((c: MasterValue) => c.name).sort())
+      }
+      if (exchangesRes.ok) {
+        const data = await exchangesRes.json()
+        setAvailableExchanges(data.map((e: MasterValue) => e.name).sort())
+      }
+      if (commoditiesRes.ok) {
+        const data = await commoditiesRes.json()
+        setAvailableCommodities(data.map((c: MasterValue) => c.name).sort())
+      }
+    } catch (error) {
+      console.error("Error fetching dropdown values:", error)
     }
+  }
+
+  useEffect(() => {
     fetchDropdownValues()
   }, [])
 
@@ -232,6 +273,8 @@ export function Masters() {
               { method: 'DELETE' }
             )
           }
+          // Refresh dropdown values (in case a new code was auto-created)
+          fetchDropdownValues()
           // Refresh mappings
           fetchStrategyCodeMappings()
         } else {
@@ -287,6 +330,8 @@ export function Masters() {
               { method: 'DELETE' }
             )
           }
+          // Refresh dropdown values (in case a new exchange was auto-created)
+          fetchDropdownValues()
           fetchCodeExchangeMappings()
         } else {
           const error = await response.json()
@@ -340,6 +385,8 @@ export function Masters() {
               { method: 'DELETE' }
             )
           }
+          // Refresh dropdown values (in case a new commodity was auto-created)
+          fetchDropdownValues()
           fetchExchangeCommodityMappings()
         } else {
           const error = await response.json()
@@ -357,6 +404,13 @@ export function Masters() {
   const { gridRowData, gridColDefs } = useMemo(() => {
     // Group codes by strategy
     const strategyCodesMap: Record<string, string[]> = {};
+
+    // Initialize all available strategies (even those with no mappings)
+    availableStrategies.forEach(strategy => {
+      strategyCodesMap[strategy] = [];
+    });
+
+    // Add mappings
     strategyCodeMappings.forEach(mapping => {
       if (!strategyCodesMap[mapping.strategy]) {
         strategyCodesMap[mapping.strategy] = [];
@@ -400,11 +454,17 @@ export function Masters() {
     }));
 
     return { gridRowData: rowData, gridColDefs: colDefs };
-  }, [strategyCodeMappings, availableCodes])
+  }, [strategyCodeMappings, availableCodes, availableStrategies])
 
   // Transform Code-Exchange mappings into grid format: codes as columns, exchanges as rows
   const { codeExchangeGridRowData, codeExchangeGridColDefs } = useMemo(() => {
     const codeExchangesMap: Record<string, string[]> = {};
+
+    // Initialize all available codes (even those with no mappings)
+    availableCodes.forEach(code => {
+      codeExchangesMap[code] = [];
+    });
+
     codeExchangeMappings.forEach(mapping => {
       if (!codeExchangesMap[mapping.code]) {
         codeExchangesMap[mapping.code] = [];
@@ -444,11 +504,17 @@ export function Masters() {
     }));
 
     return { codeExchangeGridRowData: rowData, codeExchangeGridColDefs: colDefs };
-  }, [codeExchangeMappings, availableExchanges])
+  }, [codeExchangeMappings, availableExchanges, availableCodes])
 
   // Transform Exchange-Commodity mappings into grid format: exchanges as columns, commodities as rows
   const { exchangeCommodityGridRowData, exchangeCommodityGridColDefs } = useMemo(() => {
     const exchangeCommoditiesMap: Record<string, string[]> = {};
+
+    // Initialize all available exchanges (even those with no mappings)
+    availableExchanges.forEach(exchange => {
+      exchangeCommoditiesMap[exchange] = [];
+    });
+
     exchangeCommodityMappings.forEach(mapping => {
       if (!exchangeCommoditiesMap[mapping.exchange]) {
         exchangeCommoditiesMap[mapping.exchange] = [];
@@ -488,7 +554,7 @@ export function Masters() {
     }));
 
     return { exchangeCommodityGridRowData: rowData, exchangeCommodityGridColDefs: colDefs };
-  }, [exchangeCommodityMappings, availableCommodities])
+  }, [exchangeCommodityMappings, availableCommodities, availableExchanges])
 
   // Fetch all master data on component mount
   useEffect(() => {
@@ -612,6 +678,91 @@ export function Masters() {
     }
   }
 
+  const handleAddNewColumn = async () => {
+    const trimmedName = newItemName.trim()
+    if (!trimmedName) {
+      alert('Please enter a name')
+      return
+    }
+
+    try {
+      setLoading(true)
+      const response = await fetch(`${API_BASE_URL}/masters/${addingType}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: trimmedName }),
+      })
+
+      if (response.ok) {
+        setShowAddDialog(false)
+        setNewItemName('')
+        // Refresh dropdown values to include new item as column
+        await fetchDropdownValues()
+        // Also refresh masters
+        fetchAllMasters()
+      } else {
+        const error = await response.json()
+        alert(`Failed to add ${addingType}: ${error.detail}`)
+      }
+    } catch (error) {
+      console.error("Error adding:", error)
+      alert("Error adding. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const openAddDialog = (type: 'Strategy' | 'Code' | 'Exchange') => {
+    setAddingType(type)
+    setNewItemName('')
+    setShowAddDialog(true)
+  }
+
+  const openDeleteDialog = (name: string, type: 'Strategy' | 'Code' | 'Exchange') => {
+    setDeletingItem({ name, type })
+    setShowDeleteDialog(true)
+  }
+
+  const handleDeleteColumn = async () => {
+    if (!deletingItem) return
+
+    try {
+      setLoading(true)
+      const response = await fetch(
+        `${API_BASE_URL}/masters/${deletingItem.type}/by-name/${encodeURIComponent(deletingItem.name)}`,
+        { method: "DELETE" }
+      )
+
+      if (response.ok) {
+        const result = await response.json()
+        alert(result.message)
+        setShowDeleteDialog(false)
+        setDeletingItem(null)
+        // Refresh dropdown values and mappings
+        await fetchDropdownValues()
+        fetchAllMasters()
+        // Refresh the current mapping view
+        if (selectedMappingView === "Strategy") {
+          fetchStrategyCodeMappings()
+        } else if (selectedMappingView === "Code") {
+          fetchCodeExchangeMappings()
+        } else if (selectedMappingView === "Exchange") {
+          fetchExchangeCommodityMappings()
+        }
+      } else {
+        const error = await response.json()
+        alert(`Failed to delete ${deletingItem.type}: ${error.detail}`)
+      }
+    } catch (error) {
+      console.error("Error deleting:", error)
+      alert("Error deleting. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleDeleteValue = async (value: MasterValue) => {
     if (!selectedMaster || !confirm(`Are you sure you want to delete "${value.name}" from ${selectedMaster}?`)) {
       return
@@ -682,7 +833,7 @@ export function Masters() {
 
           {/* Display Mapping buttons or selected master's values */}
           {selectedMaster === "Mapping" ? (
-            <Card className="max-w-2xl">
+            <Card className="w-full">
               <CardHeader>
                 <CardTitle>Mapping Management</CardTitle>
                 <CardDescription>
@@ -730,9 +881,28 @@ export function Masters() {
                 {/* Display Strategy-Code mappings in AG Grid: strategies as columns */}
                 {selectedMappingView === "Strategy" && (
                   <div className="mt-6">
-                    <h3 className="text-lg font-semibold mb-3">
-                      Strategy - Code Mappings ({strategyCodeMappings.length} records)
-                    </h3>
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="text-lg font-semibold">
+                        Strategy-Code Master
+                      </h3>
+                      <div className="flex gap-2 items-center">
+                        <Select onValueChange={(value) => openDeleteDialog(value, 'Strategy')}>
+                          <SelectTrigger className="w-48">
+                            <SelectValue placeholder="Delete Strategy..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableStrategies.map((strategy) => (
+                              <SelectItem key={strategy} value={strategy}>
+                                {strategy}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button onClick={() => openAddDialog('Strategy')}>
+                          + Add New Strategy
+                        </Button>
+                      </div>
+                    </div>
                     <div className="ag-theme-alpine" style={{ height: 500, width: '100%' }}>
                       <AgGridReact
                         rowData={gridRowData}
@@ -754,9 +924,28 @@ export function Masters() {
                 {/* Display Code-Exchange mappings in AG Grid: codes as columns */}
                 {selectedMappingView === "Code" && (
                   <div className="mt-6">
-                    <h3 className="text-lg font-semibold mb-3">
-                      Code - Exchange Mappings ({codeExchangeMappings.length} records)
-                    </h3>
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="text-lg font-semibold">
+                        Code-Exchange Master
+                      </h3>
+                      <div className="flex gap-2 items-center">
+                        <Select onValueChange={(value) => openDeleteDialog(value, 'Code')}>
+                          <SelectTrigger className="w-48">
+                            <SelectValue placeholder="Delete Code..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableCodes.map((code) => (
+                              <SelectItem key={code} value={code}>
+                                {code}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button onClick={() => openAddDialog('Code')}>
+                          + Add New Code
+                        </Button>
+                      </div>
+                    </div>
                     <div className="ag-theme-alpine" style={{ height: 500, width: '100%' }}>
                       <AgGridReact
                         rowData={codeExchangeGridRowData}
@@ -778,9 +967,28 @@ export function Masters() {
                 {/* Display Exchange-Commodity mappings in AG Grid: exchanges as columns */}
                 {selectedMappingView === "Exchange" && (
                   <div className="mt-6">
-                    <h3 className="text-lg font-semibold mb-3">
-                      Exchange - Commodity Mappings ({exchangeCommodityMappings.length} records)
-                    </h3>
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="text-lg font-semibold">
+                        Exchange-Commodity Master
+                      </h3>
+                      <div className="flex gap-2 items-center">
+                        <Select onValueChange={(value) => openDeleteDialog(value, 'Exchange')}>
+                          <SelectTrigger className="w-48">
+                            <SelectValue placeholder="Delete Exchange..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableExchanges.map((exchange) => (
+                              <SelectItem key={exchange} value={exchange}>
+                                {exchange}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button onClick={() => openAddDialog('Exchange')}>
+                          + Add New Exchange
+                        </Button>
+                      </div>
+                    </div>
                     <div className="ag-theme-alpine" style={{ height: 500, width: '100%' }}>
                       <AgGridReact
                         rowData={exchangeCommodityGridRowData}
@@ -863,6 +1071,64 @@ export function Masters() {
           ) : null}
         </>
       )}
+
+      {/* Add New Item Dialog */}
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New {addingType}</DialogTitle>
+            <DialogDescription>
+              Enter the name for the new {addingType.toLowerCase()}. It will be added as a new column.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="new-item-name">{addingType} Name</Label>
+            <Input
+              id="new-item-name"
+              value={newItemName}
+              onChange={(e) => setNewItemName(e.target.value)}
+              placeholder={`Enter ${addingType.toLowerCase()} name`}
+              className="mt-2"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleAddNewColumn()
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddNewColumn} disabled={loading}>
+              {loading ? 'Adding...' : `Add ${addingType}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {deletingItem?.type}</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{deletingItem?.name}"? This will also delete all associated mappings. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowDeleteDialog(false)
+              setDeletingItem(null)
+            }}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteColumn} disabled={loading}>
+              {loading ? 'Deleting...' : `Delete ${deletingItem?.type}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
