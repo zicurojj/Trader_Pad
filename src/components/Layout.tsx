@@ -1,6 +1,7 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { FileText, Settings, Grid3x3, Users, LogOut, Database } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { BackendHeartbeat } from '@/components/BackendHeartbeat';
 import {
   Sidebar,
   SidebarContent,
@@ -112,13 +113,16 @@ export function Layout() {
         <SidebarRail />
       </Sidebar>
       <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
-          <div className="flex items-center gap-2 px-4">
-            <SidebarTrigger className="-ml-1" />
+        <BackendHeartbeat />
+        <div className="mt-8">
+          <header className="flex h-16 shrink-0 items-center gap-2 justify-between transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
+            <div className="flex items-center gap-2 px-4">
+              <SidebarTrigger className="-ml-1" />
+            </div>
+          </header>
+          <div className="flex flex-1 flex-col gap-4 p-4 pt-0 overflow-auto">
+            <Outlet />
           </div>
-        </header>
-        <div className="flex flex-1 flex-col gap-4 p-4 pt-0 overflow-auto">
-          <Outlet />
         </div>
       </SidebarInset>
     </SidebarProvider>

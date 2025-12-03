@@ -72,6 +72,15 @@ def read_root():
     }
 
 
+@app.get("/api/health")
+def health_check():
+    """
+    Health check endpoint for monitoring backend status.
+    Returns 200 OK if backend is running.
+    """
+    return {"status": "healthy", "message": "Backend is running"}
+
+
 @app.post("/api/trade-entries", response_model=TradeEntryResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 def create_trade_entry(entry: TradeEntryCreate, authorization: Optional[str] = Header(None)):
     """
