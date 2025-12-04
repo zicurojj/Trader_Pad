@@ -1036,6 +1036,44 @@ export function ManualTradeExcelGrid() {
             .ag-theme-alpine .ag-cell-range-selected:not(.ag-cell-focus) {
               background-color: #bfdbfe !important;
             }
+
+            /* Make filter dropdown more prominent */
+            .ag-theme-alpine .ag-filter {
+              background-color: #ffffff !important;
+              border: 2px solid #3b82f6 !important;
+              box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2) !important;
+            }
+            .ag-theme-alpine .ag-filter-body {
+              background-color: #ffffff !important;
+              opacity: 1 !important;
+            }
+            .ag-theme-alpine .ag-filter-wrapper {
+              background-color: #ffffff !important;
+              opacity: 1 !important;
+            }
+            .ag-theme-alpine .ag-input-field-input {
+              background-color: #ffffff !important;
+              border: 1px solid #d1d5db !important;
+              opacity: 1 !important;
+            }
+            .ag-theme-alpine .ag-picker-field-wrapper {
+              background-color: #ffffff !important;
+              border: 1px solid #d1d5db !important;
+              opacity: 1 !important;
+            }
+
+            /* Hide magnifying glass icon in filter popup */
+            .ag-theme-alpine .ag-filter .ag-icon-filter,
+            .ag-theme-alpine .ag-filter-condition .ag-icon-filter,
+            .ag-theme-alpine .ag-text-field-input-wrapper .ag-icon,
+            .ag-theme-alpine .ag-input-field .ag-icon,
+            .ag-theme-alpine .ag-filter-filter .ag-icon-filter {
+              display: none !important;
+              visibility: hidden !important;
+            }
+            .ag-theme-alpine .ag-text-field-input-wrapper::before {
+              display: none !important;
+            }
           `}</style>
           <div className="ag-theme-alpine" style={{ height: 600, width: '100%' }}>
             <AgGridReact
