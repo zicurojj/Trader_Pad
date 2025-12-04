@@ -27,6 +27,18 @@ END;
 INSERT OR IGNORE INTO users (username, password, role) VALUES
     ('admin', 'admin123', 'admin');
 
+-- User Permissions Table
+CREATE TABLE IF NOT EXISTS user_permissions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    page_key TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(user_id, page_key)
+);
+
+-- Available pages: 'trade-entry', 'manual-trade-entry', 'masters', 'all-entries', 'user-management'
+
 -- ============================================
 -- MASTER TABLES
 -- ============================================

@@ -193,6 +193,8 @@ export function Masters() {
   const [addingType, setAddingType] = useState<'Strategy' | 'Code' | 'Exchange'>('Strategy')
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [deletingItem, setDeletingItem] = useState<{ name: string; type: 'Strategy' | 'Code' | 'Exchange' } | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const ITEMS_PER_PAGE = 20
 
   // Fetch available dropdown values
   const fetchDropdownValues = async () => {
@@ -813,7 +815,10 @@ export function Masters() {
           {/* Master Selection Dropdown */}
           <div className="mb-6">
             <label className="text-sm font-medium mb-2 block">Select Master</label>
-            <Select value={selectedMaster} onValueChange={setSelectedMaster}>
+            <Select value={selectedMaster} onValueChange={(value) => {
+              setSelectedMaster(value)
+              setCurrentPage(1) // Reset to first page when changing master
+            }}>
               <SelectTrigger className="w-80">
                 <SelectValue placeholder="Choose a master to manage" />
               </SelectTrigger>
@@ -821,12 +826,16 @@ export function Masters() {
                 {/* Mapping option - special handling */}
                 <SelectItem value="Mapping">Mapping</SelectItem>
 
-                {/* Regular masters */}
+                {/* Regular masters - only Broker and Status */}
                 {Object.keys(masters)
                   .filter((masterName) =>
                     masterName !== "Contract Type" &&
                     masterName !== "Option Type" &&
-                    masterName !== "Team Name"
+                    masterName !== "Team Name" &&
+                    masterName !== "Strategy" &&
+                    masterName !== "Code" &&
+                    masterName !== "Exchange" &&
+                    masterName !== "Commodity"
                   )
                   .sort()
                   .map((masterName) => (
@@ -1006,12 +1015,15 @@ export function Masters() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {/* Add new value and delete dropdown */}
+                {/* Add new value / Search filter */}
                 <div className="flex gap-2 mb-4 pb-4 border-b">
                   <Input
-                    placeholder={`Add new ${selectedMaster.toLowerCase()}`}
+                    placeholder={`Search or add new ${selectedMaster.toLowerCase()}`}
                     value={newValue}
-                    onChange={(e) => setNewValue(e.target.value)}
+                    onChange={(e) => {
+                      setNewValue(e.target.value)
+                      setCurrentPage(1) // Reset to first page when typing
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         handleAddValue()
@@ -1027,43 +1039,73 @@ export function Masters() {
                   >
                     {loading ? "Adding..." : "Add"}
                   </Button>
-                  <SearchableDeleteDropdown
-                    label={`Search & Delete ${selectedMaster}`}
-                    items={masters[selectedMaster].map(v => v.name)}
-                    onSelect={(name) => {
-                      const valueToDelete = masters[selectedMaster].find(v => v.name === name)
-                      if (valueToDelete) {
-                        handleDeleteValue(valueToDelete)
-                      }
-                    }}
-                    placeholder={`Search ${selectedMaster.toLowerCase()}...`}
-                  />
                 </div>
 
-                {/* List of existing values */}
+                {/* List of existing values with pagination */}
                 <div className="space-y-2">
                   {masters[selectedMaster].length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">
                       No values added yet
                     </p>
                   ) : (
-                    masters[selectedMaster].map((value) => (
-                      <div
-                        key={value.id}
-                        className="flex items-center justify-between p-3 rounded border bg-slate-50 hover:bg-slate-100"
-                      >
-                        <span className="text-sm font-medium">{value.name}</span>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleDeleteValue(value)}
-                          className="h-7 px-3 text-xs"
-                          disabled={loading}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    ))
+                    <>
+                      {masters[selectedMaster]
+                        .filter((value) =>
+                          value.name.toLowerCase().includes(newValue.toLowerCase())
+                        )
+                        .slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+                        .map((value) => (
+                          <div
+                            key={value.id}
+                            className="flex items-center justify-between p-3 rounded border bg-slate-50 hover:bg-slate-100"
+                          >
+                            <span className="text-sm font-medium">{value.name}</span>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDeleteValue(value)}
+                              className="h-7 px-3 text-xs"
+                              disabled={loading}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        ))}
+
+                      {/* Pagination controls */}
+                      {(() => {
+                        const filteredItems = masters[selectedMaster].filter((value) =>
+                          value.name.toLowerCase().includes(newValue.toLowerCase())
+                        )
+                        return filteredItems.length > ITEMS_PER_PAGE && (
+                          <div className="flex items-center justify-between pt-4 border-t">
+                            <div className="text-sm text-muted-foreground">
+                              Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to{' '}
+                              {Math.min(currentPage * ITEMS_PER_PAGE, filteredItems.length)} of{' '}
+                              {filteredItems.length} items
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                disabled={currentPage === 1}
+                              >
+                                Previous
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setCurrentPage(prev => Math.min(Math.ceil(filteredItems.length / ITEMS_PER_PAGE), prev + 1))}
+                                disabled={currentPage >= Math.ceil(filteredItems.length / ITEMS_PER_PAGE)}
+                              >
+                                Next
+                              </Button>
+                            </div>
+                          </div>
+                        )
+                      })()}
+                    </>
                   )}
                 </div>
               </CardContent>

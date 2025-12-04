@@ -4,6 +4,7 @@ import { API_BASE_URL } from '@/constants';
 interface User {
   username: string;
   role: 'admin' | 'user';
+  permissions: string[];
 }
 
 interface AuthContextType {
@@ -27,7 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const savedToken = sessionStorage.getItem('auth_token');
       if (savedToken) {
         try {
-          const response = await fetch(`${API_BASE_URL}/auth/validate`, {
+          const response = await fetch(`${API_BASE_URL}/session`, {
             headers: {
               'Authorization': `Bearer ${savedToken}`,
             },
@@ -37,7 +38,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const data = await response.json();
             if (data.valid) {
               setToken(savedToken);
-              setUser({ username: data.username, role: data.role });
+              setUser({
+                username: data.username,
+                role: data.role,
+                permissions: data.permissions || []
+              });
             } else {
               sessionStorage.removeItem('auth_token');
             }
@@ -72,7 +77,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const data = await response.json();
       setToken(data.token);
-      setUser({ username: data.username, role: data.role });
+
+      // Fetch permissions after login
+      const sessionResponse = await fetch(`${API_BASE_URL}/session`, {
+        headers: {
+          'Authorization': `Bearer ${data.token}`,
+        },
+      });
+
+      if (sessionResponse.ok) {
+        const sessionData = await sessionResponse.json();
+        setUser({
+          username: data.username,
+          role: data.role,
+          permissions: sessionData.permissions || []
+        });
+      } else {
+        setUser({ username: data.username, role: data.role, permissions: [] });
+      }
+
       sessionStorage.setItem('auth_token', data.token);
     } catch (error) {
       throw error;

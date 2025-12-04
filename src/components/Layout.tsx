@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { FileText, Settings, Grid3x3, Users, LogOut, Database } from 'lucide-react';
+import { FileText, Settings as SettingsIcon, Grid3x3, Users, LogOut, Database, Wrench } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { BackendHeartbeat } from '@/components/BackendHeartbeat';
 import {
@@ -23,18 +23,26 @@ export function Layout() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
-  const navItems = [
-    { path: '/trade-entry', label: 'Trade Entry', icon: FileText },
-    { path: '/manual-trade-entry', label: 'Manual Trade Entry', icon: Grid3x3 },
-    { path: '/masters', label: 'Masters', icon: Settings },
+  const allNavItems = [
+    { path: '/trade-entry', label: 'Trade Entry', icon: FileText, permission: 'trade-entry' },
+    { path: '/manual-trade-entry', label: 'Manual Trade Entry', icon: Grid3x3, permission: 'manual-trade-entry' },
+    { path: '/masters', label: 'Masters', icon: SettingsIcon, permission: 'masters' },
   ];
 
+  const allAdminNavItems = [
+    { path: '/all-entries', label: 'All Trade Entries', icon: Database, permission: 'all-entries' },
+    { path: '/user-management', label: 'User Management', icon: Users, permission: 'user-management' },
+    { path: '/settings', label: 'Settings', icon: Wrench, permission: 'settings' },
+  ];
+
+  // Filter navigation items based on user permissions
+  const navItems = user?.role === 'admin'
+    ? allNavItems  // Admin sees all regular nav items
+    : allNavItems.filter(item => user?.permissions?.includes(item.permission));
+
   const adminNavItems = user?.role === 'admin'
-    ? [
-        { path: '/all-entries', label: 'All Trade Entries', icon: Database },
-        { path: '/user-management', label: 'User Management', icon: Users }
-      ]
-    : [];
+    ? allAdminNavItems  // Admin sees all admin items
+    : allAdminNavItems.filter(item => user?.permissions?.includes(item.permission));
 
   const isActive = (path: string) => location.pathname === path;
 

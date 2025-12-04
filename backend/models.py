@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import date, datetime
-from typing import Optional
+from typing import Optional, List
 
 class TradeEntryBase(BaseModel):
     """Base model for Trade Entry with all required fields"""
@@ -116,6 +116,7 @@ class UserResponse(UserBase):
     """Model for returning user data"""
     id: int
     role: str
+    permissions: Optional[List[str]] = None
     last_login: Optional[str] = Field(None, alias="lastLogin")
     created_at: str = Field(..., alias="createdAt")
     updated_at: str = Field(..., alias="updatedAt")
@@ -129,3 +130,33 @@ class SessionResponse(BaseModel):
     valid: bool
     username: Optional[str] = None
     role: Optional[str] = None
+    permissions: Optional[List[str]] = None
+
+class UserPermissionsUpdate(BaseModel):
+    """Model for updating user permissions"""
+    permissions: List[str]
+
+# Database Configuration Models
+class SQLiteConfig(BaseModel):
+    """SQLite database configuration"""
+    path: str
+
+class MSSQLConfig(BaseModel):
+    """MS SQL database configuration"""
+    server: Optional[str] = ""
+    database: Optional[str] = ""
+    username: Optional[str] = ""
+    password: Optional[str] = ""
+    connection_string: Optional[str] = ""
+
+class DatabaseConfig(BaseModel):
+    """Database configuration"""
+    type: str  # "sqlite" or "mssql"
+    sqlite: SQLiteConfig
+    mssql: MSSQLConfig
+
+class DatabaseConfigUpdate(BaseModel):
+    """Model for updating database configuration"""
+    type: str
+    sqlite: Optional[SQLiteConfig] = None
+    mssql: Optional[MSSQLConfig] = None

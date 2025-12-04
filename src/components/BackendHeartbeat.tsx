@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { API_BASE_URL } from '@/constants'
+import { Activity } from 'lucide-react'
 
 export function BackendHeartbeat() {
   const [isConnected, setIsConnected] = useState<boolean>(true)
@@ -38,12 +39,13 @@ export function BackendHeartbeat() {
       />
       <div className="fixed top-2 right-4 z-50">
         <div
-          className={`px-3 py-1 rounded text-xs font-semibold ${
+          className={`px-3 py-1 rounded text-xs font-semibold flex items-center gap-1.5 ${
             isConnected
               ? 'bg-green-500 text-white'
               : 'bg-red-600 text-white animate-pulse'
           }`}
         >
+          <Activity className="h-3 w-3" strokeWidth={3.5} />
           {isConnected ? 'Connected' : 'Disconnected'}
         </div>
       </div>

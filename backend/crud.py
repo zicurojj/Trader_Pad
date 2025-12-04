@@ -571,3 +571,56 @@ def get_all_logs(conn, limit: int = 100, offset: int = 0) -> List[dict]:
 
     rows = cursor.fetchall()
     return [dict(row) for row in rows]
+
+
+# ============================================
+# USER PERMISSIONS CRUD
+# ============================================
+
+def set_user_permissions(conn, user_id: int, page_keys: List[str]):
+    """
+    Set permissions for a user. Replaces all existing permissions.
+    """
+    cursor = conn.cursor()
+
+    # Delete existing permissions
+    cursor.execute("DELETE FROM user_permissions WHERE user_id = ?", (user_id,))
+
+    # Insert new permissions
+    for page_key in page_keys:
+        cursor.execute("""
+            INSERT INTO user_permissions (user_id, page_key)
+            VALUES (?, ?)
+        """, (user_id, page_key))
+
+
+def get_user_permissions(conn, user_id: int) -> List[str]:
+    """
+    Get all page permissions for a user.
+    Returns list of page keys.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT page_key FROM user_permissions
+        WHERE user_id = ?
+    """, (user_id,))
+
+    rows = cursor.fetchall()
+    return [row['page_key'] for row in rows]
+
+
+def get_user_permissions_by_username(conn, username: str) -> List[str]:
+    """
+    Get all page permissions for a user by username.
+    Returns list of page keys.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT up.page_key
+        FROM user_permissions up
+        JOIN users u ON up.user_id = u.id
+        WHERE u.username = ?
+    """, (username,))
+
+    rows = cursor.fetchall()
+    return [row['page_key'] for row in rows]

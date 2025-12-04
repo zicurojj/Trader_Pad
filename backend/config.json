@@ -1,0 +1,15 @@
+{
+  "database": {
+    "type": "sqlite",
+    "sqlite": {
+      "path": "./trader_entries.db"
+    },
+    "mssql": {
+      "server": "",
+      "database": "",
+      "username": "",
+      "password": "",
+      "connection_string": ""
+    }
+  }
+}

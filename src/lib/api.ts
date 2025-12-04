@@ -4,6 +4,7 @@ export type User = {
   id: number;
   username: string;
   role: string;
+  permissions?: string[];
   lastLogin: string | null;
   createdAt: string;
   updatedAt: string;
@@ -64,6 +65,18 @@ export const userAPI = {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.detail || 'Failed to delete user');
+    }
+  },
+
+  async updatePermissions(userId: number, permissions: string[]): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/users/${userId}/permissions`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ permissions }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to update permissions');
     }
   },
 };

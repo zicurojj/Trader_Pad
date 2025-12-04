@@ -270,6 +270,112 @@ export function ManualTradeExcelGrid() {
     setIsReadOnlyMode(false)
   }
 
+  // Download trades for selected date
+  const downloadTradesForDate = async () => {
+    if (!selectedDate) {
+      alert('Please select a date first')
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      console.log('Downloading trades for date:', selectedDate)
+      console.log('API URL:', `${API_BASE_URL}/trade-entries/date/${selectedDate}`)
+      console.log('Token present:', !!token)
+
+      const response = await fetch(`${API_BASE_URL}/trade-entries/date/${selectedDate}`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      })
+
+      console.log('Response status:', response.status)
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('Error response:', errorData)
+        alert(`Failed to fetch entries: ${errorData.detail || response.statusText}`)
+        throw new Error(errorData.detail || 'Failed to fetch entries')
+      }
+
+      const data = await response.json()
+      console.log('Received data:', data.length, 'entries')
+
+      if (data.length === 0) {
+        alert(`No trades found for ${selectedDate}. Make sure you have trades saved for this date.`)
+        return
+      }
+
+      // Create CSV content
+      const headers = [
+        "id",
+        "username",
+        "trade_date",
+        "strategy",
+        "code",
+        "exchange",
+        "commodity",
+        "expiry",
+        "contract_type",
+        "strike_price",
+        "option_type",
+        "buy_qty",
+        "buy_avg",
+        "sell_qty",
+        "sell_avg",
+        "client_code",
+        "broker",
+        "team_name",
+        "status",
+        "remark",
+        "tag"
+      ]
+
+      const rows = data.map((entry: any) => [
+        entry.id,
+        entry.username,
+        entry.tradeDate || entry.trade_date,
+        entry.strategy,
+        entry.code,
+        entry.exchange,
+        entry.commodity,
+        entry.expiry,
+        entry.contractType || entry.contract_type,
+        entry.strikePrice || entry.strike_price,
+        entry.optionType || entry.option_type,
+        entry.buyQty || entry.buy_qty || 0,
+        entry.buyAvg || entry.buy_avg || 0,
+        entry.sellQty || entry.sell_qty || 0,
+        entry.sellAvg || entry.sell_avg || 0,
+        entry.clientCode || entry.client_code,
+        entry.broker,
+        entry.teamName || entry.team_name,
+        entry.status,
+        entry.remark,
+        entry.tag
+      ])
+
+      const csvContent = [headers.join(","), ...rows.map((row: any[]) => row.join(","))].join("\n")
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+      const link = document.createElement("a")
+      const url = URL.createObjectURL(blob)
+      link.setAttribute("href", url)
+      link.setAttribute("download", `trades_${selectedDate}.csv`)
+      link.style.visibility = "hidden"
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      console.log('Download completed successfully')
+      alert(`Successfully downloaded ${data.length} trade(s) for ${selectedDate}`)
+    } catch (error) {
+      console.error('Error downloading trades:', error)
+      alert(`Error downloading trades: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   // Download sample CSV format
   const downloadSampleCSV = () => {
     const headers = [
@@ -980,6 +1086,15 @@ export function ManualTradeExcelGrid() {
           >
             <Download className="h-4 w-4" />
             Load Trades
+          </Button>
+          <Button
+            onClick={downloadTradesForDate}
+            size="sm"
+            className="flex items-center gap-2"
+            disabled={isLoading}
+          >
+            <Download className="h-4 w-4" />
+            Download Trades
           </Button>
           <Button
             onClick={downloadSampleCSV}

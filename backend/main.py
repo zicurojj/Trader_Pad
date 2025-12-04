@@ -39,9 +39,12 @@ from models import (
     UserCreate,
     UserUpdate,
     UserResponse,
-    SessionResponse
+    SessionResponse,
+    UserPermissionsUpdate,
+    DatabaseConfig,
+    DatabaseConfigUpdate
 )
-from database import get_db
+from database import get_db, load_config, save_config, test_connection
 import crud
 import auth
 
@@ -1332,13 +1335,16 @@ def get_all_users(authorization: Optional[str] = Header(None)):
     Get all users (Admin only).
 
     - Requires admin authorization
-    - Returns list of all users
+    - Returns list of all users with their permissions
     """
     try:
         auth.verify_admin(authorization)
 
         with get_db() as conn:
             users = crud.get_all_users(conn)
+            # Add permissions to each user
+            for user in users:
+                user["permissions"] = crud.get_user_permissions(conn, user["id"])
             return users
 
     except HTTPException:
@@ -1477,6 +1483,192 @@ def delete_user(user_id: int, authorization: Optional[str] = Header(None)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting user: {str(e)}"
+        )
+
+
+@app.put("/api/users/{user_id}/permissions")
+def update_user_permissions(user_id: int, permissions_update: UserPermissionsUpdate, authorization: Optional[str] = Header(None)):
+    """
+    Update user permissions (Admin only).
+
+    - Requires admin authorization
+    - **user_id**: User ID
+    - **permissions_update**: List of page keys the user can access
+    - Returns success message
+    """
+    try:
+        auth.verify_admin(authorization)
+
+        with get_db() as conn:
+            # Check if user exists
+            user = crud.get_user_by_id(conn, user_id)
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"User with ID {user_id} not found"
+                )
+
+            # Update permissions
+            crud.set_user_permissions(conn, user_id, permissions_update.permissions)
+
+            return {
+                "message": "Permissions updated successfully",
+                "user_id": user_id,
+                "permissions": permissions_update.permissions
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating permissions: {str(e)}"
+        )
+
+
+@app.get("/api/session", response_model=SessionResponse)
+def get_session_info(authorization: Optional[str] = Header(None)):
+    """
+    Get current session information including permissions.
+
+    - Returns user session data with permissions
+    """
+    try:
+        if not authorization or not authorization.startswith("Bearer "):
+            return SessionResponse(valid=False)
+
+        token = authorization.replace("Bearer ", "")
+        session = auth.get_session(token)
+
+        if not session:
+            return SessionResponse(valid=False)
+
+        with get_db() as conn:
+            permissions = crud.get_user_permissions_by_username(conn, session["username"])
+
+        return SessionResponse(
+            valid=True,
+            username=session["username"],
+            role=session["role"],
+            permissions=permissions
+        )
+
+    except Exception as e:
+        return SessionResponse(valid=False)
+
+
+# ============================================
+# DATABASE CONFIGURATION ENDPOINTS (Admin Only)
+# ============================================
+
+@app.get("/api/database/config")
+def get_database_config(authorization: Optional[str] = Header(None)):
+    """
+    Get current database configuration (Admin only).
+
+    - Requires admin authorization
+    - Returns database configuration (without sensitive data)
+    """
+    try:
+        auth.verify_admin(authorization)
+
+        config = load_config()
+        db_config = config["database"]
+
+        # Remove password from response for security
+        if db_config["type"] == "mssql":
+            db_config["mssql"]["password"] = "***" if db_config["mssql"]["password"] else ""
+            if db_config["mssql"]["connection_string"]:
+                db_config["mssql"]["connection_string"] = "***"
+
+        return db_config
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching database config: {str(e)}"
+        )
+
+
+@app.post("/api/database/config")
+def update_database_config(config_update: DatabaseConfigUpdate, authorization: Optional[str] = Header(None)):
+    """
+    Update database configuration (Admin only).
+
+    - Requires admin authorization
+    - **config_update**: New database configuration
+    - Returns success message
+    """
+    try:
+        auth.verify_admin(authorization)
+
+        config = load_config()
+
+        # Update database type
+        config["database"]["type"] = config_update.type
+
+        # Update SQLite config if provided
+        if config_update.sqlite:
+            config["database"]["sqlite"]["path"] = config_update.sqlite.path
+
+        # Update MS SQL config if provided
+        if config_update.mssql:
+            config["database"]["mssql"]["server"] = config_update.mssql.server or ""
+            config["database"]["mssql"]["database"] = config_update.mssql.database or ""
+            config["database"]["mssql"]["username"] = config_update.mssql.username or ""
+            # Only update password if provided (not ***)
+            if config_update.mssql.password and config_update.mssql.password != "***":
+                config["database"]["mssql"]["password"] = config_update.mssql.password
+            # Only update connection string if provided (not ***)
+            if config_update.mssql.connection_string and config_update.mssql.connection_string != "***":
+                config["database"]["mssql"]["connection_string"] = config_update.mssql.connection_string
+
+        save_config(config)
+
+        return {
+            "message": "Database configuration updated successfully",
+            "database_type": config_update.type
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating database config: {str(e)}"
+        )
+
+
+@app.post("/api/database/test")
+def test_database_connection(authorization: Optional[str] = Header(None)):
+    """
+    Test current database connection (Admin only).
+
+    - Requires admin authorization
+    - Returns connection test result
+    """
+    try:
+        auth.verify_admin(authorization)
+
+        result = test_connection()
+
+        if not result["success"]:
+            return {
+                "success": False,
+                "message": result["message"],
+                "database_type": result["database_type"]
+            }
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error testing database connection: {str(e)}"
         )
 
 

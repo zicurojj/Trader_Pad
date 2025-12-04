@@ -5,6 +5,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Alert, AlertDescription } from '../../components/ui/alert';
+import { Checkbox } from '../../components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -26,10 +27,20 @@ type User = {
   id: number;
   username: string;
   role: string;
+  permissions?: string[];
   lastLogin: string | null;
   createdAt: string;
   updatedAt: string;
 }
+
+const AVAILABLE_PAGES = [
+  { key: 'trade-entry', label: 'Trade Entry' },
+  { key: 'manual-trade-entry', label: 'Manual Trade Entry' },
+  { key: 'masters', label: 'Masters' },
+  { key: 'settings', label: 'Settings' },
+  { key: 'all-entries', label: 'All Trade Entries' },
+  { key: 'user-management', label: 'User Management' },
+];
 
 export default function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
@@ -41,19 +52,25 @@ export default function UserManagement() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
 
   // Reset Password Dialog State
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetUserId, setResetUserId] = useState<number | null>(null);
   const [resetPassword, setResetPassword] = useState('');
-  const [isResetting, setIsResetting] = useState(false);
 
   // Delete User Dialog State
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteUserId, setDeleteUserId] = useState<number | null>(null);
   const [deleteUsername, setDeleteUsername] = useState('');
-  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Permissions Dialog State
+  const [showPermissionsDialog, setShowPermissionsDialog] = useState(false);
+  const [permissionsUserId, setPermissionsUserId] = useState<number | null>(null);
+  const [permissionsUsername, setPermissionsUsername] = useState('');
+  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+
+  // Unified loading state for all dialogs
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loadUsers = async () => {
     try {
@@ -71,27 +88,46 @@ export default function UserManagement() {
     loadUsers();
   }, []);
 
+  // Auto-dismiss success messages after 3 seconds
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => setSuccess(''), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [success]);
+
+  // Generic handler wrapper for dialog submissions
+  const handleDialogSubmit = async (
+    apiCall: () => Promise<void>,
+    successMessage: string,
+    closeHandler: () => void
+  ) => {
+    setIsSubmitting(true);
+    setError('');
+
+    try {
+      await apiCall();
+      setSuccess(successMessage);
+      closeHandler();
+      loadUsers();
+    } catch (err: any) {
+      setError(err.message || 'Operation failed');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleCreateUser = async () => {
     if (!newUsername || !newPassword) {
       setError('Username and password are required');
       return;
     }
 
-    setIsCreating(true);
-    setError('');
-
-    try {
-      await userAPI.create(newUsername, newPassword);
-      setSuccess('User created successfully');
-      setShowCreateDialog(false);
-      setNewUsername('');
-      setNewPassword('');
-      loadUsers();
-    } catch (err: any) {
-      setError(err.message || 'Failed to create user');
-    } finally {
-      setIsCreating(false);
-    }
+    await handleDialogSubmit(
+      () => userAPI.create(newUsername, newPassword),
+      'User created successfully',
+      closeCreateDialog
+    );
   };
 
   const handleResetPassword = async () => {
@@ -100,43 +136,50 @@ export default function UserManagement() {
       return;
     }
 
-    setIsResetting(true);
-    setError('');
-
-    try {
-      await userAPI.resetPassword(resetUserId, resetPassword);
-      setSuccess('Password reset successfully');
-      setShowResetDialog(false);
-      setResetUserId(null);
-      setResetPassword('');
-      loadUsers();
-    } catch (err: any) {
-      setError(err.message || 'Failed to reset password');
-    } finally {
-      setIsResetting(false);
-    }
+    await handleDialogSubmit(
+      () => userAPI.resetPassword(resetUserId, resetPassword),
+      'Password reset successfully',
+      closeResetDialog
+    );
   };
 
   const handleDeleteUser = async () => {
     if (!deleteUserId) return;
 
-    setIsDeleting(true);
-    setError('');
-
-    try {
-      await userAPI.delete(deleteUserId);
-      setSuccess('User deleted successfully');
-      setShowDeleteDialog(false);
-      setDeleteUserId(null);
-      setDeleteUsername('');
-      loadUsers();
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete user');
-    } finally {
-      setIsDeleting(false);
-    }
+    await handleDialogSubmit(
+      () => userAPI.delete(deleteUserId),
+      'User deleted successfully',
+      closeDeleteDialog
+    );
   };
 
+  // Dialog close handlers with state cleanup
+  const closeCreateDialog = () => {
+    setShowCreateDialog(false);
+    setNewUsername('');
+    setNewPassword('');
+  };
+
+  const closeResetDialog = () => {
+    setShowResetDialog(false);
+    setResetUserId(null);
+    setResetPassword('');
+  };
+
+  const closeDeleteDialog = () => {
+    setShowDeleteDialog(false);
+    setDeleteUserId(null);
+    setDeleteUsername('');
+  };
+
+  const closePermissionsDialog = () => {
+    setShowPermissionsDialog(false);
+    setPermissionsUserId(null);
+    setPermissionsUsername('');
+    setSelectedPermissions([]);
+  };
+
+  // Dialog open handlers
   const openResetDialog = (userId: number) => {
     setResetUserId(userId);
     setResetPassword('');
@@ -147,6 +190,31 @@ export default function UserManagement() {
     setDeleteUserId(userId);
     setDeleteUsername(username);
     setShowDeleteDialog(true);
+  };
+
+  const openPermissionsDialog = (user: User) => {
+    setPermissionsUserId(user.id);
+    setPermissionsUsername(user.username);
+    setSelectedPermissions(user.permissions || []);
+    setShowPermissionsDialog(true);
+  };
+
+  const handleUpdatePermissions = async () => {
+    if (!permissionsUserId) return;
+
+    await handleDialogSubmit(
+      () => userAPI.updatePermissions(permissionsUserId, selectedPermissions),
+      'Permissions updated successfully',
+      closePermissionsDialog
+    );
+  };
+
+  const togglePermission = (pageKey: string) => {
+    setSelectedPermissions(prev =>
+      prev.includes(pageKey)
+        ? prev.filter(p => p !== pageKey)
+        : [...prev, pageKey]
+    );
   };
 
   const formatDate = (dateString: string | null) => {
@@ -210,6 +278,15 @@ export default function UserManagement() {
                     <TableCell>{formatDate(user.lastLogin)}</TableCell>
                     <TableCell>
                       <div className="flex gap-2">
+                        {user.role !== 'admin' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openPermissionsDialog(user)}
+                          >
+                            Manage Permissions
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"
@@ -237,7 +314,7 @@ export default function UserManagement() {
       </Card>
 
       {/* Create User Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+      <Dialog open={showCreateDialog} onOpenChange={(open) => !open && closeCreateDialog()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create New User</DialogTitle>
@@ -253,6 +330,7 @@ export default function UserManagement() {
                 value={newUsername}
                 onChange={(e) => setNewUsername(e.target.value)}
                 placeholder="Enter username"
+                onKeyDown={(e) => e.key === 'Enter' && handleCreateUser()}
               />
             </div>
             <div className="space-y-2">
@@ -263,22 +341,23 @@ export default function UserManagement() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Enter password"
+                onKeyDown={(e) => e.key === 'Enter' && handleCreateUser()}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+            <Button variant="outline" onClick={closeCreateDialog}>
               Cancel
             </Button>
-            <Button onClick={handleCreateUser} disabled={isCreating}>
-              {isCreating ? 'Creating...' : 'Create User'}
+            <Button onClick={handleCreateUser} disabled={isSubmitting}>
+              {isSubmitting ? 'Creating...' : 'Create User'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Reset Password Dialog */}
-      <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+      <Dialog open={showResetDialog} onOpenChange={(open) => !open && closeResetDialog()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reset Password</DialogTitle>
@@ -295,22 +374,23 @@ export default function UserManagement() {
                 value={resetPassword}
                 onChange={(e) => setResetPassword(e.target.value)}
                 placeholder="Enter new password"
+                onKeyDown={(e) => e.key === 'Enter' && handleResetPassword()}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowResetDialog(false)}>
+            <Button variant="outline" onClick={closeResetDialog}>
               Cancel
             </Button>
-            <Button onClick={handleResetPassword} disabled={isResetting}>
-              {isResetting ? 'Resetting...' : 'Reset Password'}
+            <Button onClick={handleResetPassword} disabled={isSubmitting}>
+              {isSubmitting ? 'Resetting...' : 'Reset Password'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Delete User Dialog */}
-      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <Dialog open={showDeleteDialog} onOpenChange={(open) => !open && closeDeleteDialog()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete User</DialogTitle>
@@ -320,11 +400,48 @@ export default function UserManagement() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+            <Button variant="outline" onClick={closeDeleteDialog}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDeleteUser} disabled={isDeleting}>
-              {isDeleting ? 'Deleting...' : 'Delete User'}
+            <Button variant="destructive" onClick={handleDeleteUser} disabled={isSubmitting}>
+              {isSubmitting ? 'Deleting...' : 'Delete User'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage Permissions Dialog */}
+      <Dialog open={showPermissionsDialog} onOpenChange={(open) => !open && closePermissionsDialog()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manage Permissions for {permissionsUsername}</DialogTitle>
+            <DialogDescription>
+              Select which pages this user can access. Admin users have access to all pages.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {AVAILABLE_PAGES.map((page) => (
+              <div key={page.key} className="flex items-center space-x-2">
+                <Checkbox
+                  id={page.key}
+                  checked={selectedPermissions.includes(page.key)}
+                  onCheckedChange={() => togglePermission(page.key)}
+                />
+                <Label
+                  htmlFor={page.key}
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  {page.label}
+                </Label>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closePermissionsDialog}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdatePermissions} disabled={isSubmitting}>
+              {isSubmitting ? 'Updating...' : 'Update Permissions'}
             </Button>
           </DialogFooter>
         </DialogContent>
