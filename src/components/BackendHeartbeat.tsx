@@ -28,10 +28,13 @@ export function BackendHeartbeat() {
   }, [])
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50">
-      <div className={`h-1 ${isConnected ? 'bg-green-500' : 'bg-red-600 animate-pulse'}`}></div>
-      <div className={`px-4 py-1 text-center ${isConnected ? 'bg-green-50' : 'bg-red-50'}`}>
-        <span className={`text-xs font-medium ${isConnected ? 'text-green-700' : 'text-red-700'}`}>
+    <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
+      <div className={`px-20 py-1.5 rounded-lg border-4 shadow-lg ${
+        isConnected
+          ? 'bg-green-50 border-green-500'
+          : 'bg-red-50 border-red-600 animate-pulse'
+      }`}>
+        <span className={`text-sm font-semibold ${isConnected ? 'text-green-700' : 'text-red-700'}`}>
           {isConnected ? 'Connected' : 'Disconnected'}
         </span>
       </div>
