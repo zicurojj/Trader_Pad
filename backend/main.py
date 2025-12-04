@@ -1886,6 +1886,99 @@ def download_logs(from_date: date, to_date: date, authorization: Optional[str] =
         )
 
 
+@app.get("/api/logs")
+def get_logs(from_date: date, to_date: date, authorization: Optional[str] = Header(None)):
+    """
+    Get logs for a date range as JSON (Admin only).
+
+    - Requires admin authorization
+    - **from_date**: Start date (YYYY-MM-DD)
+    - **to_date**: End date (YYYY-MM-DD)
+    - Returns list of log entries
+    """
+    try:
+        auth.verify_admin(authorization)
+
+        with get_db() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT
+                    id,
+                    entry_id,
+                    operation_type,
+                    log_tag,
+                    username,
+                    trade_date,
+                    strategy,
+                    code,
+                    exchange,
+                    commodity,
+                    expiry,
+                    contract_type,
+                    strike_price,
+                    option_type,
+                    client_code,
+                    broker,
+                    team_name,
+                    buy_qty,
+                    buy_avg,
+                    sell_qty,
+                    sell_avg,
+                    status,
+                    remark,
+                    tag,
+                    changed_by,
+                    changed_at
+                FROM trader_entries_logs
+                WHERE DATE(changed_at) >= ? AND DATE(changed_at) <= ?
+                ORDER BY changed_at DESC
+            """, (from_date.isoformat(), to_date.isoformat()))
+
+            rows = cursor.fetchall()
+
+            logs = []
+            for row in rows:
+                logs.append({
+                    "id": row["id"],
+                    "entryId": row["entry_id"],
+                    "operationType": row["operation_type"],
+                    "logTag": row["log_tag"],
+                    "username": row["username"],
+                    "tradeDate": row["trade_date"],
+                    "strategy": row["strategy"],
+                    "code": row["code"],
+                    "exchange": row["exchange"],
+                    "commodity": row["commodity"],
+                    "expiry": row["expiry"],
+                    "contractType": row["contract_type"],
+                    "strikePrice": row["strike_price"],
+                    "optionType": row["option_type"],
+                    "clientCode": row["client_code"],
+                    "broker": row["broker"],
+                    "teamName": row["team_name"],
+                    "buyQty": row["buy_qty"],
+                    "buyAvg": row["buy_avg"],
+                    "sellQty": row["sell_qty"],
+                    "sellAvg": row["sell_avg"],
+                    "status": row["status"],
+                    "remark": row["remark"],
+                    "tag": row["tag"],
+                    "changedBy": row["changed_by"],
+                    "changedAt": row["changed_at"]
+                })
+
+            return logs
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching logs: {str(e)}"
+        )
+
+
 @app.get("/api/logs/count")
 def get_logs_count(from_date: date, to_date: date, authorization: Optional[str] = Header(None)):
     """

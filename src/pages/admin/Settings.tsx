@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Settings as SettingsIcon, Activity, CheckCircle2, XCircle, RefreshCw, Database, FileText, Download } from 'lucide-react';
+import { Settings as SettingsIcon, Activity, CheckCircle2, XCircle, RefreshCw, Database, FileText, Download, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import { API_BASE_URL } from '@/constants';
 import { useAuth } from '@/contexts/AuthContext';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -23,6 +23,35 @@ type ApiStatus = {
   responseTime?: number;
   statusCode?: number;
   error?: string;
+};
+
+type LogEntry = {
+  id: number;
+  entryId: number;
+  operationType: string;
+  logTag: string;
+  username: string;
+  tradeDate: string;
+  strategy: string;
+  code: string;
+  exchange: string;
+  commodity: string;
+  expiry: string;
+  contractType: string;
+  strikePrice: number;
+  optionType: string;
+  clientCode: string;
+  broker: string;
+  teamName: string;
+  buyQty: number | null;
+  buyAvg: number | null;
+  sellQty: number | null;
+  sellAvg: number | null;
+  status: string;
+  remark: string;
+  tag: string;
+  changedBy: string;
+  changedAt: string;
 };
 
 const API_ENDPOINTS: ApiEndpoint[] = [
@@ -95,12 +124,18 @@ export function Settings() {
   const [activeTab, setActiveTab] = useState('db-connection');
 
   // Log management state
-  const [logFromDate, setLogFromDate] = useState('');
-  const [logToDate, setLogToDate] = useState('');
-  const [logCount, setLogCount] = useState<number | null>(null);
-  const [isCheckingLogs, setIsCheckingLogs] = useState(false);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const [logFromDate, setLogFromDate] = useState(yesterday.toISOString().split('T')[0]);
+  const [logToDate, setLogToDate] = useState(today.toISOString().split('T')[0]);
   const [isDownloadingLogs, setIsDownloadingLogs] = useState(false);
+  const [isViewingLogs, setIsViewingLogs] = useState(false);
   const [logStatus, setLogStatus] = useState('');
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [showLogs, setShowLogs] = useState(false);
+  const [logPage, setLogPage] = useState(1);
+  const LOGS_PER_PAGE = 20;
 
   const checkApiStatus = async (api: ApiEndpoint): Promise<ApiStatus> => {
     const startTime = Date.now();
@@ -309,43 +344,6 @@ export function Settings() {
     }
   }, [activeTab]);
 
-  const checkLogCount = async () => {
-    if (!logFromDate || !logToDate) {
-      setLogStatus('Please select both From and To dates');
-      return;
-    }
-
-    setIsCheckingLogs(true);
-    setLogStatus('');
-    setLogCount(null);
-
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/logs/count?from_date=${logFromDate}&to_date=${logToDate}`,
-        {
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        }
-      );
-
-      if (response.ok) {
-        const result = await response.json();
-        setLogCount(result.count);
-        if (result.count === 0) {
-          setLogStatus('No logs found for the selected date range');
-        }
-      } else {
-        const error = await response.json();
-        setLogStatus(`Error: ${error.detail}`);
-      }
-    } catch (error) {
-      setLogStatus(`Error checking logs: ${error}`);
-    } finally {
-      setIsCheckingLogs(false);
-    }
-  };
-
   const downloadLogs = async () => {
     if (!logFromDate || !logToDate) {
       setLogStatus('Please select both From and To dates');
@@ -384,6 +382,46 @@ export function Settings() {
       setLogStatus(`Error downloading logs: ${error}`);
     } finally {
       setIsDownloadingLogs(false);
+    }
+  };
+
+  const viewLogs = async () => {
+    if (!logFromDate || !logToDate) {
+      setLogStatus('Please select both From and To dates');
+      return;
+    }
+
+    setIsViewingLogs(true);
+    setLogStatus('');
+    setLogs([]);
+    setShowLogs(false);
+    setLogPage(1);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/logs?from_date=${logFromDate}&to_date=${logToDate}`,
+        {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setLogs(data);
+        setShowLogs(true);
+        if (data.length === 0) {
+          setLogStatus('No logs found for the selected date range');
+        }
+      } else {
+        const error = await response.json();
+        setLogStatus(`Error: ${error.detail}`);
+      }
+    } catch (error) {
+      setLogStatus(`Error fetching logs: ${error}`);
+    } finally {
+      setIsViewingLogs(false);
     }
   };
 
@@ -667,7 +705,6 @@ export function Settings() {
                     value={logFromDate}
                     onChange={(e) => {
                       setLogFromDate(e.target.value);
-                      setLogCount(null);
                       setLogStatus('');
                     }}
                   />
@@ -680,7 +717,6 @@ export function Settings() {
                     value={logToDate}
                     onChange={(e) => {
                       setLogToDate(e.target.value);
-                      setLogCount(null);
                       setLogStatus('');
                     }}
                   />
@@ -689,17 +725,20 @@ export function Settings() {
 
               <div className="flex gap-2">
                 <Button
-                  onClick={checkLogCount}
-                  disabled={isCheckingLogs || !logFromDate || !logToDate}
+                  onClick={viewLogs}
+                  disabled={isViewingLogs || !logFromDate || !logToDate}
                   variant="outline"
                 >
-                  {isCheckingLogs ? (
+                  {isViewingLogs ? (
                     <>
                       <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                      Checking...
+                      Loading...
                     </>
                   ) : (
-                    'Check Log Count'
+                    <>
+                      <Eye className="h-4 w-4 mr-2" />
+                      View Logs
+                    </>
                   )}
                 </Button>
                 <Button
@@ -720,12 +759,6 @@ export function Settings() {
                 </Button>
               </div>
 
-              {logCount !== null && logCount > 0 && (
-                <div className="p-3 bg-blue-50 text-blue-700 rounded-md text-sm">
-                  Found <strong>{logCount}</strong> log entries for the selected date range.
-                </div>
-              )}
-
               {logStatus && (
                 <p className={`text-sm ${
                   logStatus.includes('Error') ? 'text-red-600' :
@@ -736,6 +769,115 @@ export function Settings() {
                   {logStatus}
                 </p>
               )}
+
+              {showLogs && logs.length > 0 && (() => {
+                const totalPages = Math.ceil(logs.length / LOGS_PER_PAGE);
+                const startIndex = (logPage - 1) * LOGS_PER_PAGE;
+                const endIndex = startIndex + LOGS_PER_PAGE;
+                const paginatedLogs = logs.slice(startIndex, endIndex);
+
+                return (
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="bg-slate-100 px-4 py-2 border-b flex justify-between items-center">
+                      <span className="text-sm font-medium">
+                        Showing {startIndex + 1}-{Math.min(endIndex, logs.length)} of {logs.length} log entries
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowLogs(false)}
+                      >
+                        Hide
+                      </Button>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-slate-50 sticky top-0">
+                          <tr>
+                            <th className="px-2 py-2 text-left font-medium">Changed At</th>
+                            <th className="px-2 py-2 text-left font-medium">Operation</th>
+                            <th className="px-2 py-2 text-left font-medium">Tag</th>
+                            <th className="px-2 py-2 text-left font-medium">Entry ID</th>
+                            <th className="px-2 py-2 text-left font-medium">Changed By</th>
+                            <th className="px-2 py-2 text-left font-medium">Username</th>
+                            <th className="px-2 py-2 text-left font-medium">Trade Date</th>
+                            <th className="px-2 py-2 text-left font-medium">Strategy</th>
+                            <th className="px-2 py-2 text-left font-medium">Code</th>
+                            <th className="px-2 py-2 text-left font-medium">Exchange</th>
+                            <th className="px-2 py-2 text-left font-medium">Commodity</th>
+                            <th className="px-2 py-2 text-left font-medium">Buy Qty</th>
+                            <th className="px-2 py-2 text-left font-medium">Buy Avg</th>
+                            <th className="px-2 py-2 text-left font-medium">Sell Qty</th>
+                            <th className="px-2 py-2 text-left font-medium">Sell Avg</th>
+                            <th className="px-2 py-2 text-left font-medium">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginatedLogs.map((log) => (
+                            <tr key={log.id} className="border-t hover:bg-slate-50">
+                              <td className="px-2 py-1.5 whitespace-nowrap">{log.changedAt}</td>
+                              <td className="px-2 py-1.5">
+                                <span className={`px-1.5 py-0.5 rounded text-xs ${
+                                  log.operationType === 'DELETE' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                                }`}>
+                                  {log.operationType}
+                                </span>
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <span className={`px-1.5 py-0.5 rounded text-xs ${
+                                  log.logTag === 'before' ? 'bg-yellow-100 text-yellow-700' :
+                                  log.logTag === 'after' ? 'bg-green-100 text-green-700' :
+                                  'bg-red-100 text-red-700'
+                                }`}>
+                                  {log.logTag}
+                                </span>
+                              </td>
+                              <td className="px-2 py-1.5">{log.entryId}</td>
+                              <td className="px-2 py-1.5">{log.changedBy}</td>
+                              <td className="px-2 py-1.5">{log.username}</td>
+                              <td className="px-2 py-1.5">{log.tradeDate}</td>
+                              <td className="px-2 py-1.5">{log.strategy}</td>
+                              <td className="px-2 py-1.5">{log.code}</td>
+                              <td className="px-2 py-1.5">{log.exchange}</td>
+                              <td className="px-2 py-1.5">{log.commodity}</td>
+                              <td className="px-2 py-1.5">{log.buyQty ?? '-'}</td>
+                              <td className="px-2 py-1.5">{log.buyAvg ?? '-'}</td>
+                              <td className="px-2 py-1.5">{log.sellQty ?? '-'}</td>
+                              <td className="px-2 py-1.5">{log.sellAvg ?? '-'}</td>
+                              <td className="px-2 py-1.5">{log.status}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {totalPages > 1 && (
+                      <div className="bg-slate-50 px-4 py-2 border-t flex justify-between items-center">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setLogPage(p => Math.max(1, p - 1))}
+                          disabled={logPage === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4 mr-1" />
+                          Previous
+                        </Button>
+                        <span className="text-sm text-muted-foreground">
+                          Page {logPage} of {totalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setLogPage(p => Math.min(totalPages, p + 1))}
+                          disabled={logPage === totalPages}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4 ml-1" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="text-xs text-muted-foreground border-t pt-4">
                 <p className="font-medium mb-1">Log Information:</p>
