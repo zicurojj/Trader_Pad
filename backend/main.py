@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, status, Header, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from datetime import date, datetime
 from typing import List, Optional
 import csv
@@ -44,7 +45,7 @@ from models import (
     DatabaseConfig,
     DatabaseConfigUpdate
 )
-from database import get_db, load_config, save_config, test_connection
+from database import get_db, load_config, save_config, test_connection, test_new_connection
 import crud
 import auth
 
@@ -82,6 +83,30 @@ def health_check():
     Returns 200 OK if backend is running.
     """
     return {"status": "healthy", "message": "Backend is running"}
+
+
+@app.get("/api/health/db")
+def health_check_db():
+    """
+    Health check endpoint for monitoring database connection status.
+    Returns current database connection status and type.
+    """
+    result = test_connection()
+
+    if result["success"]:
+        return {
+            "status": "healthy",
+            "message": result["message"],
+            "database_type": result["database_type"],
+            "connected": True
+        }
+    else:
+        return {
+            "status": "unhealthy",
+            "message": result["message"],
+            "database_type": result["database_type"],
+            "connected": False
+        }
 
 
 @app.post("/api/trade-entries", response_model=TradeEntryResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
@@ -1669,6 +1694,235 @@ def test_database_connection(authorization: Optional[str] = Header(None)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error testing database connection: {str(e)}"
+        )
+
+
+@app.post("/api/database/test-config")
+def test_new_database_config(config: DatabaseConfigUpdate, authorization: Optional[str] = Header(None)):
+    """
+    Test a new database configuration before saving (Admin only).
+
+    - Requires admin authorization
+    - Tests connection to the specified database
+    - Verifies that an 'admin' user exists in the database
+    - Returns success only if both connection and admin user check pass
+    """
+    try:
+        auth.verify_admin(authorization)
+
+        # Prepare config for testing
+        sqlite_path = None
+        mssql_config = None
+
+        if config.type == "sqlite":
+            if config.sqlite:
+                sqlite_path = config.sqlite.path
+            else:
+                return {
+                    "success": False,
+                    "message": "SQLite path is required",
+                    "database_type": config.type,
+                    "admin_exists": False
+                }
+        elif config.type == "mssql":
+            if config.mssql:
+                mssql_config = {
+                    "server": config.mssql.server,
+                    "database": config.mssql.database,
+                    "username": config.mssql.username,
+                    "password": config.mssql.password,
+                    "connection_string": config.mssql.connection_string
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": "MS SQL configuration is required",
+                    "database_type": config.type,
+                    "admin_exists": False
+                }
+
+        # Test the new connection
+        result = test_new_connection(
+            db_type=config.type,
+            sqlite_path=sqlite_path,
+            mssql_config=mssql_config
+        )
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error testing database configuration: {str(e)}"
+        )
+
+
+# ============================================
+# LOG MANAGEMENT ENDPOINTS (Admin Only)
+# ============================================
+
+@app.get("/api/logs/download")
+def download_logs(from_date: date, to_date: date, authorization: Optional[str] = Header(None)):
+    """
+    Download logs for a date range as CSV (Admin only).
+
+    - Requires admin authorization
+    - **from_date**: Start date (YYYY-MM-DD)
+    - **to_date**: End date (YYYY-MM-DD)
+    - Returns CSV file with logs
+    """
+    try:
+        auth.verify_admin(authorization)
+
+        with get_db() as conn:
+            cursor = conn.cursor()
+
+            # Query logs within the date range
+            cursor.execute("""
+                SELECT
+                    id,
+                    entry_id,
+                    operation_type,
+                    log_tag,
+                    username,
+                    trade_date,
+                    strategy,
+                    code,
+                    exchange,
+                    commodity,
+                    expiry,
+                    contract_type,
+                    strike_price,
+                    option_type,
+                    client_code,
+                    broker,
+                    team_name,
+                    buy_qty,
+                    buy_avg,
+                    sell_qty,
+                    sell_avg,
+                    status,
+                    remark,
+                    tag,
+                    changed_by,
+                    changed_at
+                FROM trader_entries_logs
+                WHERE DATE(changed_at) >= ? AND DATE(changed_at) <= ?
+                ORDER BY changed_at DESC
+            """, (from_date.isoformat(), to_date.isoformat()))
+
+            rows = cursor.fetchall()
+
+            if not rows:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"No logs found between {from_date} and {to_date}"
+                )
+
+            # Create CSV in memory
+            output = io.StringIO()
+            writer = csv.writer(output)
+
+            # Write header
+            writer.writerow([
+                'ID', 'Entry ID', 'Operation Type', 'Log Tag', 'Username',
+                'Trade Date', 'Strategy', 'Code', 'Exchange', 'Commodity',
+                'Expiry', 'Contract Type', 'Strike Price', 'Option Type',
+                'Client Code', 'Broker', 'Team Name', 'Buy Qty', 'Buy Avg',
+                'Sell Qty', 'Sell Avg', 'Status', 'Remark', 'Tag',
+                'Changed By', 'Changed At'
+            ])
+
+            # Write data rows
+            for row in rows:
+                writer.writerow([
+                    row['id'],
+                    row['entry_id'],
+                    row['operation_type'],
+                    row['log_tag'],
+                    row['username'],
+                    row['trade_date'],
+                    row['strategy'],
+                    row['code'],
+                    row['exchange'],
+                    row['commodity'],
+                    row['expiry'],
+                    row['contract_type'],
+                    row['strike_price'],
+                    row['option_type'],
+                    row['client_code'],
+                    row['broker'],
+                    row['team_name'],
+                    row['buy_qty'],
+                    row['buy_avg'],
+                    row['sell_qty'],
+                    row['sell_avg'],
+                    row['status'],
+                    row['remark'],
+                    row['tag'],
+                    row['changed_by'],
+                    row['changed_at']
+                ])
+
+            output.seek(0)
+
+            # Generate filename with date range
+            filename = f"logs_{from_date}_{to_date}.csv"
+
+            return StreamingResponse(
+                iter([output.getvalue()]),
+                media_type="text/csv",
+                headers={"Content-Disposition": f"attachment; filename={filename}"}
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error downloading logs: {str(e)}"
+        )
+
+
+@app.get("/api/logs/count")
+def get_logs_count(from_date: date, to_date: date, authorization: Optional[str] = Header(None)):
+    """
+    Get count of logs for a date range (Admin only).
+
+    - Requires admin authorization
+    - **from_date**: Start date (YYYY-MM-DD)
+    - **to_date**: End date (YYYY-MM-DD)
+    - Returns count of logs in the date range
+    """
+    try:
+        auth.verify_admin(authorization)
+
+        with get_db() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT COUNT(*) as count
+                FROM trader_entries_logs
+                WHERE DATE(changed_at) >= ? AND DATE(changed_at) <= ?
+            """, (from_date.isoformat(), to_date.isoformat()))
+
+            result = cursor.fetchone()
+            count = result['count'] if result else 0
+
+            return {
+                "from_date": from_date.isoformat(),
+                "to_date": to_date.isoformat(),
+                "count": count
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting logs count: {str(e)}"
         )
 
 

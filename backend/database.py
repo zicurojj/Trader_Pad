@@ -204,5 +204,134 @@ def test_connection() -> Dict[str, Any]:
             "database_type": get_db_config()["type"]
         }
 
+def test_new_connection(db_type: str, sqlite_path: str = None, mssql_config: Dict = None) -> Dict[str, Any]:
+    """
+    Test a new database connection before saving config.
+    Also checks if an 'admin' user exists in the database.
+
+    Args:
+        db_type: "sqlite" or "mssql"
+        sqlite_path: Path to SQLite database file (for sqlite type)
+        mssql_config: MS SQL configuration dict (for mssql type)
+
+    Returns:
+        Dict with success status, message, and admin_exists flag
+    """
+    conn = None
+    try:
+        if db_type == "sqlite":
+            if not sqlite_path:
+                return {
+                    "success": False,
+                    "message": "SQLite path is required",
+                    "database_type": db_type,
+                    "admin_exists": False
+                }
+
+            # Resolve relative path
+            if not os.path.isabs(sqlite_path):
+                sqlite_path = os.path.join(BASE_DIR, sqlite_path)
+
+            # Check if file exists
+            if not os.path.exists(sqlite_path):
+                return {
+                    "success": False,
+                    "message": f"Database file not found: {sqlite_path}",
+                    "database_type": db_type,
+                    "admin_exists": False
+                }
+
+            conn = sqlite3.connect(sqlite_path)
+            conn.row_factory = sqlite3.Row
+
+        elif db_type == "mssql":
+            if not mssql_config:
+                return {
+                    "success": False,
+                    "message": "MS SQL configuration is required",
+                    "database_type": db_type,
+                    "admin_exists": False
+                }
+
+            # Use connection string if provided
+            if mssql_config.get("connection_string"):
+                conn_str = mssql_config["connection_string"]
+            else:
+                server = mssql_config.get("server", "")
+                database = mssql_config.get("database", "")
+                username = mssql_config.get("username", "")
+                password = mssql_config.get("password", "")
+
+                conn_str = (
+                    f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+                    f"SERVER={server};"
+                    f"DATABASE={database};"
+                    f"UID={username};"
+                    f"PWD={password}"
+                )
+
+            conn = pyodbc.connect(conn_str)
+        else:
+            return {
+                "success": False,
+                "message": f"Unsupported database type: {db_type}",
+                "database_type": db_type,
+                "admin_exists": False
+            }
+
+        cursor = conn.cursor()
+
+        # Test basic connection
+        if db_type == "sqlite":
+            cursor.execute("SELECT 1")
+        else:
+            cursor.execute("SELECT 1 AS test")
+        cursor.fetchone()
+
+        # Check if users table exists and has admin user
+        admin_exists = False
+        try:
+            cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
+            count = cursor.fetchone()[0]
+            admin_exists = count > 0
+        except Exception as table_error:
+            conn.close()
+            return {
+                "success": False,
+                "message": f"Database connected but users table not found or invalid: {str(table_error)}",
+                "database_type": db_type,
+                "admin_exists": False
+            }
+
+        conn.close()
+
+        if not admin_exists:
+            return {
+                "success": True,
+                "message": "Database connected successfully, but no 'admin' user found. Please ensure the database has an admin user.",
+                "database_type": db_type,
+                "admin_exists": False
+            }
+
+        return {
+            "success": True,
+            "message": f"Successfully connected to {db_type} database with admin user verified",
+            "database_type": db_type,
+            "admin_exists": True
+        }
+
+    except Exception as e:
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
+        return {
+            "success": False,
+            "message": str(e),
+            "database_type": db_type,
+            "admin_exists": False
+        }
+
 if __name__ == "__main__":
     init_db()

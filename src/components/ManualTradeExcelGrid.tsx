@@ -67,6 +67,12 @@ class AutocompleteCellEditor {
     this.eDropdown.style.cssText = 'position: absolute; top: 100%; left: 0; right: 0; max-height: 200px; overflow-y: auto; background-color: white; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000;'
     this.eGui.appendChild(this.eDropdown)
 
+    // Prevent dropdown clicks from closing the editor
+    this.eDropdown.addEventListener('mousedown', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+    })
+
     this.renderDropdown()
 
     this.eInput.addEventListener('input', () => {
@@ -130,7 +136,10 @@ class AutocompleteCellEditor {
       const item = document.createElement('div')
       item.textContent = v || '(empty)'
       item.style.cssText = `padding: 8px 12px; cursor: pointer; background-color: ${index === this.highlightedIndex ? '#e6f7ff' : 'white'}; border-bottom: ${index < this.filteredValues.length - 1 ? '1px solid #f0f0f0' : 'none'};`
-      item.addEventListener('click', () => {
+      // Use mousedown instead of click to select before focus is lost
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
         this.value = v
         this.params.stopEditing()
       })

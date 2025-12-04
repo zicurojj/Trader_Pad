@@ -38,7 +38,6 @@ const AVAILABLE_PAGES = [
   { key: 'manual-trade-entry', label: 'Manual Trade Entry' },
   { key: 'masters', label: 'Masters' },
   { key: 'settings', label: 'Settings' },
-  { key: 'all-entries', label: 'All Trade Entries' },
   { key: 'user-management', label: 'User Management' },
 ];
 

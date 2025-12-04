@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Settings as SettingsIcon, Activity, CheckCircle2, XCircle, RefreshCw, Database } from 'lucide-react';
+import { Settings as SettingsIcon, Activity, CheckCircle2, XCircle, RefreshCw, Database, FileText, Download } from 'lucide-react';
 import { API_BASE_URL } from '@/constants';
 import { useAuth } from '@/contexts/AuthContext';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -81,6 +81,26 @@ export function Settings() {
   const [connectionStatus, setConnectionStatus] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [isConnectionVerified, setIsConnectionVerified] = useState(false);
+  const isInitialLoad = useRef(true);
+
+  // Current DB health status
+  const [dbHealth, setDbHealth] = useState<{
+    status: 'checking' | 'healthy' | 'unhealthy';
+    message: string;
+    database_type: string;
+  }>({ status: 'checking', message: 'Checking...', database_type: '' });
+
+  // Tab state for auto-refresh
+  const [activeTab, setActiveTab] = useState('db-connection');
+
+  // Log management state
+  const [logFromDate, setLogFromDate] = useState('');
+  const [logToDate, setLogToDate] = useState('');
+  const [logCount, setLogCount] = useState<number | null>(null);
+  const [isCheckingLogs, setIsCheckingLogs] = useState(false);
+  const [isDownloadingLogs, setIsDownloadingLogs] = useState(false);
+  const [logStatus, setLogStatus] = useState('');
 
   const checkApiStatus = async (api: ApiEndpoint): Promise<ApiStatus> => {
     const startTime = Date.now();
@@ -157,6 +177,26 @@ export function Settings() {
     }
   };
 
+  const checkDbHealth = async () => {
+    setDbHealth(prev => ({ ...prev, status: 'checking' }));
+    try {
+      const response = await fetch(`${API_BASE_URL}/health/db`);
+      const result = await response.json();
+
+      setDbHealth({
+        status: result.connected ? 'healthy' : 'unhealthy',
+        message: result.message,
+        database_type: result.database_type,
+      });
+    } catch (error) {
+      setDbHealth({
+        status: 'unhealthy',
+        message: 'Failed to check database connection',
+        database_type: '',
+      });
+    }
+  };
+
   const saveDatabaseConfig = async () => {
     setIsSaving(true);
     setConnectionStatus('');
@@ -185,6 +225,8 @@ export function Settings() {
 
       if (response.ok) {
         setConnectionStatus('Configuration saved successfully!');
+        // Refresh DB health status after saving
+        checkDbHealth();
       } else {
         const error = await response.json();
         setConnectionStatus(`Error: ${error.detail}`);
@@ -199,24 +241,46 @@ export function Settings() {
   const testDatabaseConnection = async () => {
     setIsTesting(true);
     setConnectionStatus('');
+    setIsConnectionVerified(false);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/database/test`, {
+      // Build config from form values to test
+      const configData = {
+        type: dbConnection,
+        sqlite: { path: sqlitePath },
+        mssql: {
+          server: mssqlServer,
+          database: mssqlDatabase,
+          username: mssqlUsername,
+          password: mssqlPassword,
+          connection_string: mssqlConnectionString,
+        },
+      };
+
+      const response = await fetch(`${API_BASE_URL}/database/test-config`, {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        body: JSON.stringify(configData),
       });
 
       const result = await response.json();
 
-      if (result.success) {
+      if (result.success && result.admin_exists) {
         setConnectionStatus(`✓ ${result.message}`);
+        setIsConnectionVerified(true);
+      } else if (result.success && !result.admin_exists) {
+        setConnectionStatus(`⚠ ${result.message}`);
+        setIsConnectionVerified(false);
       } else {
         setConnectionStatus(`✗ Connection failed: ${result.message}`);
+        setIsConnectionVerified(false);
       }
     } catch (error) {
       setConnectionStatus(`✗ Error testing connection: ${error}`);
+      setIsConnectionVerified(false);
     } finally {
       setIsTesting(false);
     }
@@ -225,7 +289,103 @@ export function Settings() {
   useEffect(() => {
     checkAllApis();
     loadDatabaseConfig();
+    checkDbHealth();
   }, []);
+
+  // Reset connection verification when any config value changes (skip initial load)
+  useEffect(() => {
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      return;
+    }
+    setIsConnectionVerified(false);
+    setConnectionStatus('');
+  }, [dbConnection, sqlitePath, mssqlServer, mssqlDatabase, mssqlUsername, mssqlPassword, mssqlConnectionString]);
+
+  // Auto-refresh DB health when switching to DB Connection tab
+  useEffect(() => {
+    if (activeTab === 'db-connection') {
+      checkDbHealth();
+    }
+  }, [activeTab]);
+
+  const checkLogCount = async () => {
+    if (!logFromDate || !logToDate) {
+      setLogStatus('Please select both From and To dates');
+      return;
+    }
+
+    setIsCheckingLogs(true);
+    setLogStatus('');
+    setLogCount(null);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/logs/count?from_date=${logFromDate}&to_date=${logToDate}`,
+        {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+
+      if (response.ok) {
+        const result = await response.json();
+        setLogCount(result.count);
+        if (result.count === 0) {
+          setLogStatus('No logs found for the selected date range');
+        }
+      } else {
+        const error = await response.json();
+        setLogStatus(`Error: ${error.detail}`);
+      }
+    } catch (error) {
+      setLogStatus(`Error checking logs: ${error}`);
+    } finally {
+      setIsCheckingLogs(false);
+    }
+  };
+
+  const downloadLogs = async () => {
+    if (!logFromDate || !logToDate) {
+      setLogStatus('Please select both From and To dates');
+      return;
+    }
+
+    setIsDownloadingLogs(true);
+    setLogStatus('');
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/logs/download?from_date=${logFromDate}&to_date=${logToDate}`,
+        {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `logs_${logFromDate}_${logToDate}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        setLogStatus('Download completed successfully!');
+      } else {
+        const error = await response.json();
+        setLogStatus(`Error: ${error.detail}`);
+      }
+    } catch (error) {
+      setLogStatus(`Error downloading logs: ${error}`);
+    } finally {
+      setIsDownloadingLogs(false);
+    }
+  };
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -236,7 +396,7 @@ export function Settings() {
         </div>
       </div>
 
-      <Tabs defaultValue="db-connection" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList>
           <TabsTrigger value="db-connection">
             <Database className="h-4 w-4 mr-2" />
@@ -246,15 +406,44 @@ export function Settings() {
             <Activity className="h-4 w-4 mr-2" />
             API Status
           </TabsTrigger>
+          <TabsTrigger value="log-management">
+            <FileText className="h-4 w-4 mr-2" />
+            Log Management
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="db-connection">
           <Card>
             <CardHeader>
-              <CardTitle>Database Connection</CardTitle>
-              <CardDescription>
-                Select the database connection type and provide connection details
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Database Connection</CardTitle>
+                  <CardDescription>
+                    Select the database connection type and provide connection details
+                  </CardDescription>
+                </div>
+                {/* Current DB Connection Status */}
+                <div
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium cursor-pointer hover:opacity-80 ${
+                    dbHealth.status === 'checking' ? 'bg-blue-100 text-blue-700' :
+                    dbHealth.status === 'healthy' ? 'bg-green-100 text-green-700' :
+                    'bg-red-100 text-red-700'
+                  }`}
+                  onClick={checkDbHealth}
+                  title="Click to refresh"
+                >
+                  {dbHealth.status === 'checking' ? (
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                  ) : dbHealth.status === 'healthy' ? (
+                    <CheckCircle2 className="h-3 w-3" />
+                  ) : (
+                    <XCircle className="h-3 w-3" />
+                  )}
+                  {dbHealth.status === 'checking' ? 'Checking...' :
+                   dbHealth.status === 'healthy' ? 'Connected' :
+                   'Disconnected'}
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
               <RadioGroup value={dbConnection} onValueChange={(value) => setDbConnection(value as 'sqlite' | 'mssql')}>
@@ -283,15 +472,20 @@ export function Settings() {
                     </p>
                   </div>
                   <div className="flex gap-2">
-                    <Button onClick={saveDatabaseConfig} disabled={isSaving}>
+                    <Button onClick={saveDatabaseConfig} disabled={isSaving || !isConnectionVerified}>
                       {isSaving ? 'Saving...' : 'Save Configuration'}
                     </Button>
                     <Button onClick={testDatabaseConnection} disabled={isTesting} variant="outline">
                       {isTesting ? 'Testing...' : 'Test Connection'}
                     </Button>
                   </div>
+                  {!isConnectionVerified && !connectionStatus && (
+                    <p className="text-sm text-muted-foreground">
+                      Please test the connection before saving
+                    </p>
+                  )}
                   {connectionStatus && (
-                    <p className={`text-sm ${connectionStatus.includes('✓') ? 'text-green-600' : connectionStatus.includes('✗') ? 'text-red-600' : 'text-blue-600'}`}>
+                    <p className={`text-sm ${connectionStatus.includes('✓') ? 'text-green-600' : connectionStatus.includes('⚠') ? 'text-yellow-600' : connectionStatus.includes('✗') ? 'text-red-600' : 'text-blue-600'}`}>
                       {connectionStatus}
                     </p>
                   )}
@@ -368,15 +562,20 @@ export function Settings() {
                     </>
                   )}
                   <div className="flex gap-2">
-                    <Button onClick={saveDatabaseConfig} disabled={isSaving}>
+                    <Button onClick={saveDatabaseConfig} disabled={isSaving || !isConnectionVerified}>
                       {isSaving ? 'Saving...' : 'Save Configuration'}
                     </Button>
                     <Button onClick={testDatabaseConnection} disabled={isTesting} variant="outline">
                       {isTesting ? 'Testing...' : 'Test Connection'}
                     </Button>
                   </div>
+                  {!isConnectionVerified && !connectionStatus && (
+                    <p className="text-sm text-muted-foreground">
+                      Please test the connection before saving
+                    </p>
+                  )}
                   {connectionStatus && (
-                    <p className={`text-sm ${connectionStatus.includes('✓') ? 'text-green-600' : connectionStatus.includes('✗') ? 'text-red-600' : 'text-blue-600'}`}>
+                    <p className={`text-sm ${connectionStatus.includes('✓') ? 'text-green-600' : connectionStatus.includes('⚠') ? 'text-yellow-600' : connectionStatus.includes('✗') ? 'text-red-600' : 'text-blue-600'}`}>
                       {connectionStatus}
                     </p>
                   )}
@@ -445,6 +644,106 @@ export function Settings() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="log-management">
+          <Card>
+            <CardHeader>
+              <CardTitle>Log Management</CardTitle>
+              <CardDescription>
+                Download audit logs for trade entry changes (updates and deletes)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="log-from-date">From Date</Label>
+                  <Input
+                    id="log-from-date"
+                    type="date"
+                    value={logFromDate}
+                    onChange={(e) => {
+                      setLogFromDate(e.target.value);
+                      setLogCount(null);
+                      setLogStatus('');
+                    }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="log-to-date">To Date</Label>
+                  <Input
+                    id="log-to-date"
+                    type="date"
+                    value={logToDate}
+                    onChange={(e) => {
+                      setLogToDate(e.target.value);
+                      setLogCount(null);
+                      setLogStatus('');
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  onClick={checkLogCount}
+                  disabled={isCheckingLogs || !logFromDate || !logToDate}
+                  variant="outline"
+                >
+                  {isCheckingLogs ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Checking...
+                    </>
+                  ) : (
+                    'Check Log Count'
+                  )}
+                </Button>
+                <Button
+                  onClick={downloadLogs}
+                  disabled={isDownloadingLogs || !logFromDate || !logToDate}
+                >
+                  {isDownloadingLogs ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Downloading...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4 mr-2" />
+                      Download Logs
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {logCount !== null && logCount > 0 && (
+                <div className="p-3 bg-blue-50 text-blue-700 rounded-md text-sm">
+                  Found <strong>{logCount}</strong> log entries for the selected date range.
+                </div>
+              )}
+
+              {logStatus && (
+                <p className={`text-sm ${
+                  logStatus.includes('Error') ? 'text-red-600' :
+                  logStatus.includes('No logs') ? 'text-yellow-600' :
+                  logStatus.includes('completed') ? 'text-green-600' :
+                  'text-muted-foreground'
+                }`}>
+                  {logStatus}
+                </p>
+              )}
+
+              <div className="text-xs text-muted-foreground border-t pt-4">
+                <p className="font-medium mb-1">Log Information:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Logs track all UPDATE and DELETE operations on trade entries</li>
+                  <li>Each log includes the before/after state of the entry</li>
+                  <li>Downloaded file will be in CSV format</li>
+                </ul>
               </div>
             </CardContent>
           </Card>

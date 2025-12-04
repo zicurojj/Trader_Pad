@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { FileText, Settings as SettingsIcon, Grid3x3, Users, LogOut, Database, Wrench } from 'lucide-react';
+import { FileText, Settings as SettingsIcon, Grid3x3, Users, LogOut, Wrench } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { BackendHeartbeat } from '@/components/BackendHeartbeat';
 import {
@@ -30,7 +30,6 @@ export function Layout() {
   ];
 
   const allAdminNavItems = [
-    { path: '/all-entries', label: 'All Trade Entries', icon: Database, permission: 'all-entries' },
     { path: '/user-management', label: 'User Management', icon: Users, permission: 'user-management' },
     { path: '/settings', label: 'Settings', icon: Wrench, permission: 'settings' },
   ];

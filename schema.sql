@@ -327,8 +327,8 @@ INSERT OR IGNORE INTO master_trade_type (name) VALUES
 
 -- Option Type Master Data
 INSERT OR IGNORE INTO master_option_type (name) VALUES
-    ('Call'),
-    ('Put'),
+    ('CE'),
+    ('PE'),
     ('N/A');
 
 -- Code Master Data
