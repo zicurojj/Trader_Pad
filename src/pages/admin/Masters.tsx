@@ -24,6 +24,7 @@ import { AgGridReact } from 'ag-grid-react'
 import { AllCommunityModule, ModuleRegistry, type ColDef, type CellValueChangedEvent } from 'ag-grid-community'
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
+import { SearchableDeleteDropdown } from "@/components/SearchableDeleteDropdown"
 
 // Register AG Grid modules
 ModuleRegistry.registerModules([AllCommunityModule])
@@ -277,6 +278,8 @@ export function Masters() {
           fetchDropdownValues()
           // Refresh mappings
           fetchStrategyCodeMappings()
+          // Refresh all masters to update the Masters Management list
+          fetchAllMasters()
         } else {
           const error = await response.json()
           alert(`Failed to create mapping: ${error.detail}`)
@@ -333,6 +336,8 @@ export function Masters() {
           // Refresh dropdown values (in case a new exchange was auto-created)
           fetchDropdownValues()
           fetchCodeExchangeMappings()
+          // Refresh all masters to update the Masters Management list
+          fetchAllMasters()
         } else {
           const error = await response.json()
           alert(`Failed to create mapping: ${error.detail}`)
@@ -388,6 +393,8 @@ export function Masters() {
           // Refresh dropdown values (in case a new commodity was auto-created)
           fetchDropdownValues()
           fetchExchangeCommodityMappings()
+          // Refresh all masters to update the Masters Management list
+          fetchAllMasters()
         } else {
           const error = await response.json()
           alert(`Failed to create mapping: ${error.detail}`)
@@ -886,18 +893,12 @@ export function Masters() {
                         Strategy-Code Master
                       </h3>
                       <div className="flex gap-2 items-center">
-                        <Select onValueChange={(value) => openDeleteDialog(value, 'Strategy')}>
-                          <SelectTrigger className="w-48">
-                            <SelectValue placeholder="Delete Strategy..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableStrategies.map((strategy) => (
-                              <SelectItem key={strategy} value={strategy}>
-                                {strategy}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <SearchableDeleteDropdown
+                          label="Search & Delete Strategy"
+                          items={availableStrategies}
+                          onSelect={(strategy) => openDeleteDialog(strategy, 'Strategy')}
+                          placeholder="Search strategy..."
+                        />
                         <Button onClick={() => openAddDialog('Strategy')}>
                           + Add New Strategy
                         </Button>
@@ -929,18 +930,12 @@ export function Masters() {
                         Code-Exchange Master
                       </h3>
                       <div className="flex gap-2 items-center">
-                        <Select onValueChange={(value) => openDeleteDialog(value, 'Code')}>
-                          <SelectTrigger className="w-48">
-                            <SelectValue placeholder="Delete Code..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableCodes.map((code) => (
-                              <SelectItem key={code} value={code}>
-                                {code}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <SearchableDeleteDropdown
+                          label="Search & Delete Code"
+                          items={availableCodes}
+                          onSelect={(code) => openDeleteDialog(code, 'Code')}
+                          placeholder="Search code..."
+                        />
                         <Button onClick={() => openAddDialog('Code')}>
                           + Add New Code
                         </Button>
@@ -972,18 +967,12 @@ export function Masters() {
                         Exchange-Commodity Master
                       </h3>
                       <div className="flex gap-2 items-center">
-                        <Select onValueChange={(value) => openDeleteDialog(value, 'Exchange')}>
-                          <SelectTrigger className="w-48">
-                            <SelectValue placeholder="Delete Exchange..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableExchanges.map((exchange) => (
-                              <SelectItem key={exchange} value={exchange}>
-                                {exchange}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <SearchableDeleteDropdown
+                          label="Search & Delete Exchange"
+                          items={availableExchanges}
+                          onSelect={(exchange) => openDeleteDialog(exchange, 'Exchange')}
+                          placeholder="Search exchange..."
+                        />
                         <Button onClick={() => openAddDialog('Exchange')}>
                           + Add New Exchange
                         </Button>
@@ -1017,8 +1006,42 @@ export function Masters() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
+                {/* Add new value and delete dropdown */}
+                <div className="flex gap-2 mb-4 pb-4 border-b">
+                  <Input
+                    placeholder={`Add new ${selectedMaster.toLowerCase()}`}
+                    value={newValue}
+                    onChange={(e) => setNewValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleAddValue()
+                      }
+                    }}
+                    className="flex-1"
+                    disabled={loading}
+                  />
+                  <Button
+                    onClick={handleAddValue}
+                    variant="default"
+                    disabled={loading}
+                  >
+                    {loading ? "Adding..." : "Add"}
+                  </Button>
+                  <SearchableDeleteDropdown
+                    label={`Search & Delete ${selectedMaster}`}
+                    items={masters[selectedMaster].map(v => v.name)}
+                    onSelect={(name) => {
+                      const valueToDelete = masters[selectedMaster].find(v => v.name === name)
+                      if (valueToDelete) {
+                        handleDeleteValue(valueToDelete)
+                      }
+                    }}
+                    placeholder={`Search ${selectedMaster.toLowerCase()}...`}
+                  />
+                </div>
+
                 {/* List of existing values */}
-                <div className="space-y-2 mb-4">
+                <div className="space-y-2">
                   {masters[selectedMaster].length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">
                       No values added yet
@@ -1042,29 +1065,6 @@ export function Masters() {
                       </div>
                     ))
                   )}
-                </div>
-
-                {/* Add new value */}
-                <div className="flex gap-2 pt-4 border-t">
-                  <Input
-                    placeholder={`Add new ${selectedMaster.toLowerCase()}`}
-                    value={newValue}
-                    onChange={(e) => setNewValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        handleAddValue()
-                      }
-                    }}
-                    className="flex-1"
-                    disabled={loading}
-                  />
-                  <Button
-                    onClick={handleAddValue}
-                    variant="default"
-                    disabled={loading}
-                  >
-                    {loading ? "Adding..." : "Add"}
-                  </Button>
                 </div>
               </CardContent>
             </Card>
