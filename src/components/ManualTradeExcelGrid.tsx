@@ -288,17 +288,12 @@ export function ManualTradeExcelGrid() {
 
     try {
       setIsLoading(true)
-      console.log('Downloading trades for date:', selectedDate)
-      console.log('API URL:', `${API_BASE_URL}/trade-entries/date/${selectedDate}`)
-      console.log('Token present:', !!token)
 
       const response = await fetch(`${API_BASE_URL}/trade-entries/date/${selectedDate}`, {
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       })
-
-      console.log('Response status:', response.status)
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -308,7 +303,6 @@ export function ManualTradeExcelGrid() {
       }
 
       const data = await response.json()
-      console.log('Received data:', data.length, 'entries')
 
       if (data.length === 0) {
         alert(`No trades found for ${selectedDate}. Make sure you have trades saved for this date.`)
@@ -375,7 +369,6 @@ export function ManualTradeExcelGrid() {
       link.click()
       document.body.removeChild(link)
 
-      console.log('Download completed successfully')
       alert(`Successfully downloaded ${data.length} trade(s) for ${selectedDate}`)
     } catch (error) {
       console.error('Error downloading trades:', error)
@@ -1186,17 +1179,51 @@ export function ManualTradeExcelGrid() {
               opacity: 1 !important;
             }
 
-            /* Hide magnifying glass icon in filter popup */
+            /* Hide magnifying glass icon in filter popup - for both text and number filters */
             .ag-theme-alpine .ag-filter .ag-icon-filter,
             .ag-theme-alpine .ag-filter-condition .ag-icon-filter,
             .ag-theme-alpine .ag-text-field-input-wrapper .ag-icon,
+            .ag-theme-alpine .ag-number-field-input-wrapper .ag-icon,
             .ag-theme-alpine .ag-input-field .ag-icon,
-            .ag-theme-alpine .ag-filter-filter .ag-icon-filter {
+            .ag-theme-alpine .ag-filter-filter .ag-icon-filter,
+            .ag-theme-alpine .ag-number-filter .ag-icon,
+            .ag-theme-alpine .ag-filter .ag-icon {
               display: none !important;
               visibility: hidden !important;
             }
-            .ag-theme-alpine .ag-text-field-input-wrapper::before {
+            .ag-theme-alpine .ag-text-field-input-wrapper::before,
+            .ag-theme-alpine .ag-number-field-input-wrapper::before {
               display: none !important;
+            }
+
+            /* Numeric filter styling to match text filters */
+            .ag-theme-alpine .ag-number-filter {
+              background-color: #ffffff !important;
+            }
+            .ag-theme-alpine .ag-filter-body-wrapper {
+              background-color: #ffffff !important;
+              padding: 8px !important;
+            }
+            .ag-theme-alpine .ag-filter-condition {
+              background-color: #ffffff !important;
+            }
+            .ag-theme-alpine .ag-filter-select .ag-picker-field-wrapper {
+              background-color: #ffffff !important;
+              border: 1px solid #d1d5db !important;
+            }
+            .ag-theme-alpine .ag-number-field-input {
+              background-color: #ffffff !important;
+              border: 1px solid #d1d5db !important;
+              opacity: 1 !important;
+            }
+            .ag-theme-alpine .ag-filter-from,
+            .ag-theme-alpine .ag-filter-to {
+              background-color: #ffffff !important;
+            }
+            .ag-theme-alpine .ag-filter-apply-panel {
+              background-color: #ffffff !important;
+              border-top: 1px solid #e2e8f0 !important;
+              padding: 8px !important;
             }
           `}</style>
           <div className="ag-theme-alpine" style={{ height: 600, width: '100%' }}>

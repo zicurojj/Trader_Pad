@@ -593,7 +593,6 @@ export function Masters() {
       const response = await fetch(`${API_BASE_URL}/mappings/strategy-code`)
       if (response.ok) {
         const data = await response.json()
-        console.log("Strategy-Code Mappings:", data)
         setStrategyCodeMappings(data)
         setSelectedMappingView("Strategy")
       } else {
@@ -612,7 +611,6 @@ export function Masters() {
       const response = await fetch(`${API_BASE_URL}/mappings/code-exchange`)
       if (response.ok) {
         const data = await response.json()
-        console.log("Code-Exchange Mappings:", data)
         setCodeExchangeMappings(data)
         setSelectedMappingView("Code")
       } else {
@@ -631,7 +629,6 @@ export function Masters() {
       const response = await fetch(`${API_BASE_URL}/mappings/exchange-commodity`)
       if (response.ok) {
         const data = await response.json()
-        console.log("Exchange-Commodity Mappings:", data)
         setExchangeCommodityMappings(data)
         setSelectedMappingView("Exchange")
       } else {
