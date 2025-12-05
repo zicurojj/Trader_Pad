@@ -64,13 +64,6 @@ CREATE TABLE IF NOT EXISTS master_contract_type (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Trade Type Master
-CREATE TABLE IF NOT EXISTS master_trade_type (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
 -- Option Type Master
 CREATE TABLE IF NOT EXISTS master_option_type (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -319,11 +312,6 @@ INSERT OR IGNORE INTO master_contract_type (name) VALUES
     ('Futures'),
     ('Options'),
     ('Spot');
-
--- Trade Type Master Data
-INSERT OR IGNORE INTO master_trade_type (name) VALUES
-    ('Buy'),
-    ('Sell');
 
 -- Option Type Master Data
 INSERT OR IGNORE INTO master_option_type (name) VALUES
