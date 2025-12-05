@@ -145,9 +145,9 @@ CREATE TABLE IF NOT EXISTS trader_entries (
     commodity TEXT NOT NULL,
     expiry DATE NOT NULL,
     contract_type TEXT NOT NULL,
-    strike_price DECIMAL(10, 2) NOT NULL,
-    option_type TEXT NOT NULL,
-    client_code TEXT NOT NULL,
+    strike_price DECIMAL(10, 2),
+    option_type TEXT,
+    client_code TEXT,
     broker TEXT NOT NULL,
     team_name TEXT NOT NULL,
     buy_qty INTEGER,
@@ -191,9 +191,9 @@ CREATE TABLE IF NOT EXISTS trader_entries_logs (
     commodity TEXT NOT NULL,
     expiry DATE NOT NULL,
     contract_type TEXT NOT NULL,
-    strike_price DECIMAL(10, 2) NOT NULL,
-    option_type TEXT NOT NULL,
-    client_code TEXT NOT NULL,
+    strike_price DECIMAL(10, 2),
+    option_type TEXT,
+    client_code TEXT,
     broker TEXT NOT NULL,
     team_name TEXT NOT NULL,
     buy_qty INTEGER,
@@ -317,7 +317,6 @@ INSERT OR IGNORE INTO master_contract_type (name) VALUES
 INSERT OR IGNORE INTO master_option_type (name) VALUES
     ('CE'),
     ('PE'),
-    ('N/A');
 
 -- Code Master Data
 INSERT OR IGNORE INTO code (id, name) VALUES

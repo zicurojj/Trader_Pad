@@ -27,25 +27,32 @@ import type { MasterData } from "@/types"
 import { API_BASE_URL } from "@/constants"
 
 const formSchema = z.object({
-  date: z.string(),
+  date: z.string().min(1, "Trade date is required"),
   strategy: z.string().min(1, "Strategy is required"),
   code: z.string().min(1, "Code is required"),
   exchange: z.string().min(1, "Exchange is required"),
   commodity: z.string().min(1, "Commodity is required"),
   expiry: z.string().min(1, "Expiry is required"),
   contractType: z.string().min(1, "Contract type is required"),
-  strikePrice: z.string().min(1, "Strike price is required"),
-  optionType: z.string().min(1, "Option type is required"),
+  strikePrice: z.string().optional(),
+  optionType: z.string().optional(),
   buyQty: z.string().optional(),
   buyAvg: z.string().optional(),
   sellQty: z.string().optional(),
   sellAvg: z.string().optional(),
-  clientCode: z.string().min(1, "Client code is required"),
+  clientCode: z.string().optional(),
   broker: z.string().min(1, "Broker is required"),
   teamName: z.string().min(1, "Team name is required"),
   status: z.string().min(1, "Status is required"),
-  remark: z.string().min(1, "Remark is required"),
-  tag: z.string().min(1, "Tag is required"),
+  remark: z.string().optional(),
+  tag: z.string().optional(),
+}).refine((data) => {
+  const hasBuy = data.buyQty && parseInt(data.buyQty) > 0
+  const hasSell = data.sellQty && parseInt(data.sellQty) > 0
+  return hasBuy || hasSell
+}, {
+  message: "At least Buy Qty or Sell Qty must be provided",
+  path: ["buyQty"],
 })
 
 type FormValues = z.infer<typeof formSchema>
@@ -225,18 +232,18 @@ export function TraderForm() {
           commodity: values.commodity,
           expiry: values.expiry,
           contractType: values.contractType,
-          strikePrice: parseFloat(values.strikePrice),
-          optionType: values.optionType,
+          strikePrice: values.strikePrice ? parseFloat(values.strikePrice) : null,
+          optionType: values.optionType || null,
           buyQty: values.buyQty ? parseInt(values.buyQty) : null,
           buyAvg: values.buyAvg ? parseFloat(values.buyAvg) : null,
           sellQty: values.sellQty ? parseInt(values.sellQty) : null,
           sellAvg: values.sellAvg ? parseFloat(values.sellAvg) : null,
-          clientCode: values.clientCode,
+          clientCode: values.clientCode || null,
           broker: values.broker,
           teamName: values.teamName,
           status: values.status,
-          remark: values.remark,
-          tag: values.tag,
+          remark: values.remark || null,
+          tag: values.tag || null,
         }),
       })
 
@@ -266,8 +273,14 @@ export function TraderForm() {
         // Reload entries
         fetchEntries(values.date)
       } else {
-        const error = await response.json()
-        alert(`Failed to save entry: ${error.detail}`)
+        const errorData = await response.json()
+        let errorMessage = 'Unknown error'
+        if (typeof errorData.detail === 'string') {
+          errorMessage = errorData.detail
+        } else if (Array.isArray(errorData.detail)) {
+          errorMessage = errorData.detail.map((e: any) => e.msg || e.message || JSON.stringify(e)).join(', ')
+        }
+        alert(`Failed to save entry: ${errorMessage}`)
       }
     } catch (error) {
       console.error("Error submitting entry:", error)
@@ -281,6 +294,7 @@ export function TraderForm() {
   const handleUpdateEntry = async (id: number, updatedEntry: any) => {
     try {
       setLoading(true)
+      const strikeVal = updatedEntry.strikePrice ?? updatedEntry.strike_price
       const response = await fetch(`${API_BASE_URL}/trade-entries/${id}`, {
         method: "PUT",
         headers: {
@@ -295,18 +309,18 @@ export function TraderForm() {
           commodity: updatedEntry.commodity,
           expiry: updatedEntry.expiry,
           contractType: updatedEntry.contractType || updatedEntry.contract_type,
-          strikePrice: parseFloat(updatedEntry.strikePrice || updatedEntry.strike_price),
-          optionType: updatedEntry.optionType || updatedEntry.option_type,
-          buyQty: updatedEntry.buyQty || updatedEntry.buy_qty,
-          buyAvg: updatedEntry.buyAvg || updatedEntry.buy_avg,
-          sellQty: updatedEntry.sellQty || updatedEntry.sell_qty,
-          sellAvg: updatedEntry.sellAvg || updatedEntry.sell_avg,
-          clientCode: updatedEntry.clientCode || updatedEntry.client_code,
+          strikePrice: strikeVal ? parseFloat(strikeVal) : null,
+          optionType: updatedEntry.optionType ?? updatedEntry.option_type ?? null,
+          buyQty: updatedEntry.buyQty ?? updatedEntry.buy_qty ?? null,
+          buyAvg: updatedEntry.buyAvg ?? updatedEntry.buy_avg ?? null,
+          sellQty: updatedEntry.sellQty ?? updatedEntry.sell_qty ?? null,
+          sellAvg: updatedEntry.sellAvg ?? updatedEntry.sell_avg ?? null,
+          clientCode: updatedEntry.clientCode ?? updatedEntry.client_code ?? null,
           broker: updatedEntry.broker,
           teamName: updatedEntry.teamName || updatedEntry.team_name,
           status: updatedEntry.status,
-          remark: updatedEntry.remark,
-          tag: updatedEntry.tag,
+          remark: updatedEntry.remark || null,
+          tag: updatedEntry.tag || null,
         }),
       })
 
@@ -314,8 +328,14 @@ export function TraderForm() {
         alert("Entry updated successfully!")
         fetchEntries(form.watch("date"))
       } else {
-        const error = await response.json()
-        alert(`Failed to update entry: ${error.detail}`)
+        const errorData = await response.json()
+        let errorMessage = 'Unknown error'
+        if (typeof errorData.detail === 'string') {
+          errorMessage = errorData.detail
+        } else if (Array.isArray(errorData.detail)) {
+          errorMessage = errorData.detail.map((e: any) => e.msg || e.message || JSON.stringify(e)).join(', ')
+        }
+        alert(`Failed to update entry: ${errorMessage}`)
       }
     } catch (error) {
       console.error("Error updating entry:", error)
@@ -331,14 +351,23 @@ export function TraderForm() {
       setLoading(true)
       const response = await fetch(`${API_BASE_URL}/trade-entries/${id}`, {
         method: "DELETE",
+        headers: {
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
       })
 
       if (response.ok) {
         alert("Entry deleted successfully!")
         fetchEntries(form.watch("date"))
       } else {
-        const error = await response.json()
-        alert(`Failed to delete entry: ${error.detail}`)
+        const errorData = await response.json()
+        let errorMessage = 'Unknown error'
+        if (typeof errorData.detail === 'string') {
+          errorMessage = errorData.detail
+        } else if (Array.isArray(errorData.detail)) {
+          errorMessage = errorData.detail.map((e: any) => e.msg || e.message || JSON.stringify(e)).join(', ')
+        }
+        alert(`Failed to delete entry: ${errorMessage}`)
       }
     } catch (error) {
       console.error("Error deleting entry:", error)

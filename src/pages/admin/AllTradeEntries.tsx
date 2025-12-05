@@ -69,6 +69,7 @@ export function AllTradeEntries() {
   const handleUpdateEntry = async (id: number, updatedEntry: any) => {
     try {
       setLoading(true);
+      const strikeVal = updatedEntry.strikePrice ?? updatedEntry.strike_price;
       const response = await fetch(`${API_BASE_URL}/trade-entries/${id}`, {
         method: 'PUT',
         headers: {
@@ -83,15 +84,18 @@ export function AllTradeEntries() {
           commodity: updatedEntry.commodity,
           expiry: updatedEntry.expiry,
           contractType: updatedEntry.contractType || updatedEntry.contract_type,
-          tradeType: updatedEntry.tradeType || updatedEntry.trade_type,
-          strikePrice: parseFloat(updatedEntry.strikePrice || updatedEntry.strike_price),
-          optionType: updatedEntry.optionType || updatedEntry.option_type,
-          clientCode: updatedEntry.clientCode || updatedEntry.client_code,
+          strikePrice: strikeVal ? parseFloat(strikeVal) : null,
+          optionType: updatedEntry.optionType ?? updatedEntry.option_type ?? null,
+          buyQty: updatedEntry.buyQty ?? updatedEntry.buy_qty ?? null,
+          buyAvg: updatedEntry.buyAvg ?? updatedEntry.buy_avg ?? null,
+          sellQty: updatedEntry.sellQty ?? updatedEntry.sell_qty ?? null,
+          sellAvg: updatedEntry.sellAvg ?? updatedEntry.sell_avg ?? null,
+          clientCode: updatedEntry.clientCode ?? updatedEntry.client_code ?? null,
           broker: updatedEntry.broker,
           teamName: updatedEntry.teamName || updatedEntry.team_name,
           status: updatedEntry.status,
-          remark: updatedEntry.remark,
-          tag: updatedEntry.tag,
+          remark: updatedEntry.remark || null,
+          tag: updatedEntry.tag || null,
         }),
       });
 
@@ -99,8 +103,14 @@ export function AllTradeEntries() {
         alert('Entry updated successfully!');
         fetchEntries(currentDate);
       } else {
-        const error = await response.json();
-        alert(`Failed to update entry: ${error.detail}`);
+        const errorData = await response.json();
+        let errorMessage = 'Unknown error';
+        if (typeof errorData.detail === 'string') {
+          errorMessage = errorData.detail;
+        } else if (Array.isArray(errorData.detail)) {
+          errorMessage = errorData.detail.map((e: any) => e.msg || e.message || JSON.stringify(e)).join(', ');
+        }
+        alert(`Failed to update entry: ${errorMessage}`);
       }
     } catch (error) {
       console.error('Error updating entry:', error);
@@ -120,14 +130,23 @@ export function AllTradeEntries() {
       setLoading(true);
       const response = await fetch(`${API_BASE_URL}/trade-entries/${id}`, {
         method: 'DELETE',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
 
       if (response.ok) {
         alert('Entry deleted successfully!');
         fetchEntries(currentDate);
       } else {
-        const error = await response.json();
-        alert(`Failed to delete entry: ${error.detail}`);
+        const errorData = await response.json();
+        let errorMessage = 'Unknown error';
+        if (typeof errorData.detail === 'string') {
+          errorMessage = errorData.detail;
+        } else if (Array.isArray(errorData.detail)) {
+          errorMessage = errorData.detail.map((e: any) => e.msg || e.message || JSON.stringify(e)).join(', ');
+        }
+        alert(`Failed to delete entry: ${errorMessage}`);
       }
     } catch (error) {
       console.error('Error deleting entry:', error);

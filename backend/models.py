@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from datetime import date, datetime
 from typing import Optional, List
 
@@ -11,21 +11,32 @@ class TradeEntryBase(BaseModel):
     commodity: str
     expiry: date
     contract_type: str = Field(..., alias="contractType")
-    strike_price: float = Field(..., alias="strikePrice")
-    option_type: str = Field(..., alias="optionType")
+    strike_price: Optional[float] = Field(None, alias="strikePrice")
+    option_type: Optional[str] = Field("", alias="optionType")
     buy_qty: Optional[int] = Field(None, alias="buyQty")
     buy_avg: Optional[float] = Field(None, alias="buyAvg")
     sell_qty: Optional[int] = Field(None, alias="sellQty")
     sell_avg: Optional[float] = Field(None, alias="sellAvg")
-    client_code: str = Field(..., alias="clientCode")
+    client_code: Optional[str] = Field(None, alias="clientCode")
     broker: str
     team_name: str = Field(..., alias="teamName")
     status: str
-    remark: str
-    tag: str
+    remark: Optional[str] = None
+    tag: Optional[str] = None
 
     class Config:
         populate_by_name = True  # Allow using both snake_case and camelCase
+
+    @model_validator(mode='after')
+    def validate_buy_or_sell(self):
+        """Ensure at least buy or sell (or both) is provided"""
+        has_buy = self.buy_qty is not None or self.buy_avg is not None
+        has_sell = self.sell_qty is not None or self.sell_avg is not None
+
+        if not has_buy and not has_sell:
+            raise ValueError('At least buy (qty/avg) or sell (qty/avg) must be provided')
+
+        return self
 
 
 class TradeEntryCreate(TradeEntryBase):

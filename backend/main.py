@@ -223,6 +223,41 @@ async def upload_trade_entries_csv(file: UploadFile = File(...), authorization: 
         )
 
 
+@app.post("/api/trade-entries/bulk", response_model=dict, status_code=status.HTTP_201_CREATED)
+def bulk_create_trade_entries_json(entries: List[TradeEntryCreate], authorization: Optional[str] = Header(None)):
+    """
+    Create multiple trade entries at once (JSON).
+
+    - **entries**: List of trade entry objects
+    - Returns count of created entries and their IDs
+    """
+    try:
+        session = auth.verify_token(authorization)
+        username = session["username"]
+
+        if not entries:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No entries provided"
+            )
+
+        with get_db() as conn:
+            entry_ids = crud.bulk_create_trade_entries(conn, entries, username)
+            return {
+                "message": f"Successfully created {len(entry_ids)} trade entries",
+                "count": len(entry_ids),
+                "ids": entry_ids
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating bulk entries: {str(e)}"
+        )
+
+
 @app.get("/api/trade-entries/date/{trade_date}", response_model=List[TradeEntryResponse], response_model_by_alias=True)
 def get_trade_entries_by_date(trade_date: date, authorization: Optional[str] = Header(None)):
     """

@@ -1,29 +1,67 @@
-# Dependencies
+# ============================================
+# VERSION CONTROL
+# ============================================
+.git/
+.gitignore
+.gitattributes
+
+# ============================================
+# DEPENDENCIES
+# ============================================
 node_modules/
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
-# Build outputs
+# Python virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# ============================================
+# BUILD OUTPUTS
+# ============================================
 dist/
 dist-ssr/
+build/
 *.local
 
-# Database files
+# ============================================
+# PYTHON CACHE
+# ============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# ============================================
+# DATABASE FILES
+# ============================================
 *.db
 *.sqlite
 *.sqlite3
+trader_entries.db
+trader_entries.db-journal
+trader_entries.db-wal
+trader_entries.db-shm
 
-# Logs
+# Backend config (contains credentials)
+backend/config.json
+
+# ============================================
+# LOGS
+# ============================================
 logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
 
-# Editor directories and files
+# ============================================
+# EDITOR / IDE
+# ============================================
 .vscode/
 .idea/
 *.suo
@@ -31,22 +69,57 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+*.swp
+*.swo
 
-# OS files
+# ============================================
+# OS FILES
+# ============================================
 .DS_Store
 Thumbs.db
 desktop.ini
+ehthumbs.db
 
-# Environment files
+# ============================================
+# ENVIRONMENT FILES
+# ============================================
 .env
 .env.local
 .env.*.local
+secrets.json
+credentials.json
+*.key
+*.pem
 
-# Cache
+# ============================================
+# PLAYWRIGHT / TESTING
+# ============================================
+.playwright-mcp/
+playwright-report/
+test-results/
+coverage/
+.nyc_output/
+
+# ============================================
+# CACHE / TEMP
+# ============================================
 .cache/
 .temp/
 .tmp/
+tmp/
+*.tmp
+*.temp
 
-# Test coverage
-coverage/
-.nyc_output/
+# ============================================
+# ARCHIVES
+# ============================================
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# ============================================
+# MISC
+# ============================================
+*.csv
+check_db.py

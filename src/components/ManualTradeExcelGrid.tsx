@@ -172,6 +172,7 @@ class AutocompleteCellEditor {
 // Action buttons cell renderer - uses context for reactive data
 function ActionCellRenderer(props: ICellRendererParams) {
   const rowIndex = props.node.rowIndex ?? 0
+  const saveButtonRef = useRef<HTMLButtonElement>(null)
   const context = props.context as {
     onSave: (rowIndex: number) => void
     onDelete: (rowIndex: number) => void
@@ -179,23 +180,38 @@ function ActionCellRenderer(props: ICellRendererParams) {
     isLoading: boolean
   }
 
+  // Focus the save button when the cell receives focus
+  useEffect(() => {
+    const cell = props.eGridCell
+    if (!cell) return
+
+    const handleCellFocus = () => {
+      // Small delay to ensure the cell is fully focused
+      setTimeout(() => {
+        saveButtonRef.current?.focus()
+      }, 0)
+    }
+
+    cell.addEventListener('focus', handleCellFocus)
+    return () => cell.removeEventListener('focus', handleCellFocus)
+  }, [props.eGridCell])
+
   return (
-    <div className="flex items-center justify-center gap-1 h-full" tabIndex={-1}>
+    <div className="flex items-center justify-center gap-1 h-full">
       <button
+        ref={saveButtonRef}
         onClick={() => context.onSave(rowIndex)}
         disabled={context.isLoading || context.isReadOnly}
-        className="h-7 w-7 p-0 hover:bg-green-100 rounded flex items-center justify-center disabled:opacity-50"
+        className="h-7 w-7 p-0 hover:bg-green-100 rounded flex items-center justify-center disabled:opacity-50 focus:ring-2 focus:ring-green-500 focus:outline-none"
         title="Save this entry"
-        tabIndex={0}
       >
         <Save className="h-3 w-3" />
       </button>
       <button
         onClick={() => context.onDelete(rowIndex)}
         disabled={context.isLoading}
-        className="h-7 w-7 p-0 hover:bg-red-100 rounded flex items-center justify-center disabled:opacity-50"
+        className="h-7 w-7 p-0 hover:bg-red-100 rounded flex items-center justify-center disabled:opacity-50 focus:ring-2 focus:ring-red-500 focus:outline-none"
         title="Delete this entry"
-        tabIndex={0}
       >
         <Trash2 className="h-3 w-3" />
       </button>
@@ -552,16 +568,43 @@ export function ManualTradeExcelGrid() {
     }
   }, [entries, selectedDate, token, loadEntriesByDate])
 
+  // Validate entry and return error messages
+  const validateEntry = (entry: ManualTradeEntryCreate): string[] => {
+    const errors: string[] = []
+
+    if (!entry.tradeDate) errors.push('Trade Date is required')
+    if (!entry.strategy) errors.push('Strategy is required')
+    if (!entry.code) errors.push('Code is required')
+    if (!entry.exchange) errors.push('Exchange is required')
+    if (!entry.commodity) errors.push('Commodity is required')
+    if (!entry.expiry) errors.push('Expiry is required')
+    if (!entry.contractType) errors.push('Contract Type is required')
+    if (!entry.broker) errors.push('Broker is required')
+    if (!entry.teamName) errors.push('Team Name is required')
+    if (!entry.status) errors.push('Status is required')
+
+    // At least buy or sell must be provided
+    const hasBuy = entry.buyQty !== null && entry.buyQty !== undefined && entry.buyQty !== 0
+    const hasSell = entry.sellQty !== null && entry.sellQty !== undefined && entry.sellQty !== 0
+    if (!hasBuy && !hasSell) {
+      errors.push('At least Buy Qty or Sell Qty must be provided')
+    }
+
+    return errors
+  }
+
   const saveIndividualEntry = useCallback(async (rowIndex: number) => {
     const entry = entries[rowIndex]
 
     if (!entry) {
-      console.error('Entry not found at index:', rowIndex)
+      alert('Entry not found')
       return
     }
 
-    if (!entry.strategy || !entry.code || !entry.exchange) {
-      alert('Strategy, Code, and Exchange are required fields')
+    // Validate entry
+    const errors = validateEntry(entry)
+    if (errors.length > 0) {
+      alert(`Validation Error:\n${errors.join('\n')}`)
       return
     }
 
@@ -599,29 +642,59 @@ export function ManualTradeExcelGrid() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to save entry')
+        const errorData = await response.json().catch(() => ({}))
+        let errorMessage = 'Failed to save entry'
+        if (typeof errorData.detail === 'string') {
+          errorMessage = errorData.detail
+        } else if (Array.isArray(errorData.detail)) {
+          errorMessage = errorData.detail.map((e: any) => e.msg || e.message || JSON.stringify(e)).join(', ')
+        }
+        alert(`Error: ${errorMessage}`)
+        return
       }
 
       await response.json()
+      alert('Entry saved successfully!')
       loadEntriesByDate(selectedDate)
     } catch (error) {
       console.error('Error saving entry:', error)
+      alert(`Error saving entry: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setIsLoading(false)
     }
   }, [entries, selectedDate, token, loadEntriesByDate])
 
   const saveAllEntries = async () => {
+    // Get entries that need to be saved
+    const newEntries = entries.filter(entry => !entry.id && entry.strategy)
+    const modifiedExistingEntries = entries.filter(entry =>
+      entry.id && modifiedEntryIds.has(entry.id)
+    )
+
+    if (newEntries.length === 0 && modifiedExistingEntries.length === 0) {
+      alert('No entries to save.')
+      return
+    }
+
+    // Validate all entries before saving
+    const allEntriesToSave = [...newEntries, ...modifiedExistingEntries]
+    const validationErrors: string[] = []
+
+    allEntriesToSave.forEach((entry, index) => {
+      const errors = validateEntry(entry)
+      if (errors.length > 0) {
+        const rowNum = entries.findIndex(e => e === entry) + 1
+        validationErrors.push(`Row ${rowNum}: ${errors.join(', ')}`)
+      }
+    })
+
+    if (validationErrors.length > 0) {
+      alert(`Validation Errors:\n\n${validationErrors.join('\n\n')}`)
+      return
+    }
+
     setIsLoading(true)
     try {
-      // Separate new entries (without ID) and modified existing entries (with ID and in modifiedEntryIds set)
-      const newEntries = entries.filter(entry =>
-        entry.strategy && entry.code && entry.exchange && !entry.id
-      )
-
-      const modifiedExistingEntries = entries.filter(entry =>
-        entry.id && entry.strategy && entry.code && entry.exchange && modifiedEntryIds.has(entry.id)
-      )
 
       let savedCount = 0
       let updatedCount = 0
@@ -660,7 +733,14 @@ export function ManualTradeExcelGrid() {
         })
 
         if (!response.ok) {
-          throw new Error('Failed to save new entries')
+          const errorData = await response.json().catch(() => ({}))
+          let errorMessage = 'Failed to save new entries'
+          if (typeof errorData.detail === 'string') {
+            errorMessage = errorData.detail
+          } else if (Array.isArray(errorData.detail)) {
+            errorMessage = errorData.detail.map((e: any) => e.msg || e.message || JSON.stringify(e)).join(', ')
+          }
+          throw new Error(errorMessage)
         }
 
         savedCount = newEntries.length
@@ -702,28 +782,33 @@ export function ManualTradeExcelGrid() {
 
           if (response.ok) {
             updatedCount++
+          } else {
+            const errorData = await response.json().catch(() => ({}))
+            let errorMessage = 'Failed to update entry'
+            if (typeof errorData.detail === 'string') {
+              errorMessage = errorData.detail
+            } else if (Array.isArray(errorData.detail)) {
+              errorMessage = errorData.detail.map((e: any) => e.msg || e.message || JSON.stringify(e)).join(', ')
+            }
+            throw new Error(`Entry ${entry.id}: ${errorMessage}`)
           }
         }
       }
 
       // Show success message
-      if (savedCount > 0 || updatedCount > 0) {
-        const messages = []
-        if (savedCount > 0) messages.push(`${savedCount} new entr${savedCount === 1 ? 'y' : 'ies'} created`)
-        if (updatedCount > 0) messages.push(`${updatedCount} entr${updatedCount === 1 ? 'y' : 'ies'} updated`)
-        alert(`Success! ${messages.join(' and ')}.`)
+      const messages = []
+      if (savedCount > 0) messages.push(`${savedCount} new entr${savedCount === 1 ? 'y' : 'ies'} created`)
+      if (updatedCount > 0) messages.push(`${updatedCount} entr${updatedCount === 1 ? 'y' : 'ies'} updated`)
+      alert(`Success! ${messages.join(' and ')}.`)
 
-        // Clear modified entries set after successful save
-        setModifiedEntryIds(new Set())
-      } else {
-        alert('No valid entries to save.')
-      }
+      // Clear modified entries set after successful save
+      setModifiedEntryIds(new Set())
 
       // Reload entries from database
       await loadEntriesByDate(selectedDate)
     } catch (error) {
       console.error('Error saving entries:', error)
-      alert('Error saving entries. Please try again.')
+      alert(`Error: ${error instanceof Error ? error.message : 'Failed to save entries. Please try again.'}`)
     } finally {
       setIsLoading(false)
     }
@@ -985,7 +1070,7 @@ export function ManualTradeExcelGrid() {
       editable: false,
       cellRenderer: ActionCellRenderer,
       cellStyle: { backgroundColor: '#f8f9fa' },
-      suppressNavigable: true
+      suppressNavigable: false
     }
   ], [masters, filteredCodes, filteredExchanges, filteredCommodities, isReadOnlyMode])
 
